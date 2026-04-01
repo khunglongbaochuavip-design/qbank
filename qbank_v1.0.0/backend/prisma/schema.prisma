@@ -1,0 +1,363 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────
+// USERS & AUTH
+// ─────────────────────────────────────────────
+
+model User {
+  id           Int      @id @default(autoincrement())
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  role         String   // super_admin | academic_admin | teacher | exam_creator | student
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  createdQuestions  Question[]        @relation("QuestionCreator")
+  reviewedQuestions Question[]        @relation("QuestionReviewer")
+  questionHistory   QuestionHistory[]
+  createdMatrices   ExamMatrix[]
+  createdExams      Exam[]
+  createdSessions   ExamSession[]
+  studentAttempts   StudentAttempt[]
+  sessionStudents   SessionStudent[]
+
+  @@map("users")
+}
+
+// ─────────────────────────────────────────────
+// MASTER DATA
+// ─────────────────────────────────────────────
+
+model Subject {
+  id          Int       @id @default(autoincrement())
+  code        String    @unique
+  name        String
+  description String?
+  isActive    Boolean   @default(true)
+  sortOrder   Int       @default(0)
+  createdAt   DateTime  @default(now())
+
+  domains     Domain[]
+  questions   Question[]
+  matrices    ExamMatrix[]
+
+  @@map("subjects")
+}
+
+model Domain {
+  id        Int       @id @default(autoincrement())
+  subjectId Int
+  code      String    @unique
+  name      String
+  isActive  Boolean   @default(true)
+  sortOrder Int       @default(0)
+  createdAt DateTime  @default(now())
+
+  subject   Subject   @relation(fields: [subjectId], references: [id])
+  topics    Topic[]
+  questions Question[]
+  matrixCells MatrixCell[]
+
+  @@map("domains")
+}
+
+model Topic {
+  id        Int       @id @default(autoincrement())
+  domainId  Int
+  code      String    @unique
+  name      String
+  isActive  Boolean   @default(true)
+  sortOrder Int       @default(0)
+  createdAt DateTime  @default(now())
+
+  domain    Domain    @relation(fields: [domainId], references: [id])
+  questions Question[]
+  matrixCells MatrixCell[]
+
+  @@map("topics")
+}
+
+model GradeLevel {
+  id        Int       @id @default(autoincrement())
+  code      String    @unique
+  name      String
+  sortOrder Int       @default(0)
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+
+  questions Question[]
+
+  @@map("grade_levels")
+}
+
+model CognitiveLevel {
+  id          Int       @id @default(autoincrement())
+  code        String    @unique
+  name        String
+  description String?
+  sortOrder   Int       @default(0)
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+
+  questions   Question[]
+  matrixCells MatrixCell[]
+
+  @@map("cognitive_levels")
+}
+
+model DifficultyLevel {
+  id       Int     @id @default(autoincrement())
+  code     String  @unique
+  name     String
+  minVal   Float
+  maxVal   Float
+  isActive Boolean @default(true)
+
+  matrixCells MatrixCell[]
+
+  @@map("difficulty_levels")
+}
+
+model Tag {
+  id        Int           @id @default(autoincrement())
+  name      String        @unique
+  createdAt DateTime      @default(now())
+
+  questionTags QuestionTag[]
+
+  @@map("tags")
+}
+
+// ─────────────────────────────────────────────
+// QUESTIONS
+// ─────────────────────────────────────────────
+
+model Question {
+  id                  Int       @id @default(autoincrement())
+  questionCode        String    @unique
+  subjectId           Int?
+  domainId            Int?
+  topicId             Int?
+  gradeLevelId        Int?
+  cognitiveLevelId    Int?
+  estimatedDifficulty Float     @default(0.5)
+  empiricalDifficulty Float?
+  finalDifficulty    Float?
+  contextText         String?
+  questionText        String
+  optionA             String
+  optionB             String
+  optionC             String
+  optionD             String
+  correctOption       String    // A | B | C | D
+  explanation         String?
+  questionImage       String?
+  status              String    @default("draft") // draft|pending_review|approved|rejected|archived
+  createdById         Int?
+  reviewedById        Int?
+  notes               String?
+  sourceReference     String?
+  usageCount          Int       @default(0)
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  approvedAt          DateTime?
+
+  subject         Subject?        @relation(fields: [subjectId], references: [id])
+  domain          Domain?         @relation(fields: [domainId], references: [id])
+  topic           Topic?          @relation(fields: [topicId], references: [id])
+  gradeLevel      GradeLevel?     @relation(fields: [gradeLevelId], references: [id])
+  cognitiveLevel  CognitiveLevel? @relation(fields: [cognitiveLevelId], references: [id])
+  createdBy       User?           @relation("QuestionCreator", fields: [createdById], references: [id])
+  reviewedBy      User?           @relation("QuestionReviewer", fields: [reviewedById], references: [id])
+
+  questionTags    QuestionTag[]
+  questionHistory QuestionHistory[]
+  examQuestions   ExamQuestion[]
+  studentResponses StudentResponse[]
+
+  @@map("questions")
+}
+
+model QuestionTag {
+  questionId Int
+  tagId      Int
+
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  tag        Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([questionId, tagId])
+  @@map("question_tags")
+}
+
+model QuestionHistory {
+  id          Int      @id @default(autoincrement())
+  questionId  Int
+  changedById Int?
+  oldStatus   String?
+  newStatus   String?
+  comment     String?
+  changedAt   DateTime @default(now())
+
+  question    Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  changedBy   User?    @relation(fields: [changedById], references: [id])
+
+  @@map("question_history")
+}
+
+// ─────────────────────────────────────────────
+// EXAM MATRIX / BLUEPRINT
+// ─────────────────────────────────────────────
+
+model ExamMatrix {
+  id          Int       @id @default(autoincrement())
+  name        String
+  description String?
+  subjectId   Int?
+  createdById Int?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  subject     Subject?  @relation(fields: [subjectId], references: [id])
+  createdBy   User?     @relation(fields: [createdById], references: [id])
+  cells       MatrixCell[]
+  exams       Exam[]
+
+  @@map("exam_matrices")
+}
+
+model MatrixCell {
+  id               Int     @id @default(autoincrement())
+  matrixId         Int
+  domainId         Int?
+  topicId          Int?
+  cognitiveLevelId Int?
+  difficultyLevelId Int?
+  requiredCount    Int     @default(1)
+  createdAt        DateTime @default(now())
+
+  matrix          ExamMatrix      @relation(fields: [matrixId], references: [id], onDelete: Cascade)
+  domain          Domain?         @relation(fields: [domainId], references: [id])
+  topic           Topic?          @relation(fields: [topicId], references: [id])
+  cognitiveLevel  CognitiveLevel? @relation(fields: [cognitiveLevelId], references: [id])
+  difficultyLevel DifficultyLevel? @relation(fields: [difficultyLevelId], references: [id])
+
+  @@map("matrix_cells")
+}
+
+// ─────────────────────────────────────────────
+// GENERATED EXAMS
+// ─────────────────────────────────────────────
+
+model Exam {
+  id          Int       @id @default(autoincrement())
+  name        String
+  code        String    @unique
+  matrixId    Int?
+  status      String    @default("draft") // draft | finalized
+  createdById Int?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  finalizedAt DateTime?
+
+  matrix        ExamMatrix?   @relation(fields: [matrixId], references: [id])
+  createdBy     User?         @relation(fields: [createdById], references: [id])
+  examQuestions ExamQuestion[]
+  sessions      ExamSession[]
+
+  @@map("exams")
+}
+
+model ExamQuestion {
+  id           Int      @id @default(autoincrement())
+  examId       Int
+  questionId   Int
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now())
+
+  exam     Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id])
+
+  @@unique([examId, questionId])
+  @@map("exam_questions")
+}
+
+// ─────────────────────────────────────────────
+// ONLINE TEST SESSIONS
+// ─────────────────────────────────────────────
+
+model ExamSession {
+  id              Int       @id @default(autoincrement())
+  examId          Int
+  name            String
+  startTime       DateTime?
+  endTime         DateTime?
+  durationMinutes Int       @default(60)
+  status          String    @default("scheduled") // scheduled | active | ended
+  createdById     Int?
+  createdAt       DateTime  @default(now())
+
+  exam            Exam      @relation(fields: [examId], references: [id])
+  createdBy       User?     @relation(fields: [createdById], references: [id])
+  sessionStudents SessionStudent[]
+  attempts        StudentAttempt[]
+
+  @@map("exam_sessions")
+}
+
+model SessionStudent {
+  sessionId Int
+  studentId Int
+  invitedAt DateTime @default(now())
+
+  session   ExamSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student   User        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@id([sessionId, studentId])
+  @@map("session_students")
+}
+
+model StudentAttempt {
+  id          Int       @id @default(autoincrement())
+  sessionId   Int
+  studentId   Int
+  startedAt   DateTime  @default(now())
+  submittedAt DateTime?
+  score       Float?
+  numCorrect  Int?
+  numWrong    Int?
+  status      String    @default("in_progress") // in_progress | submitted
+
+  session   ExamSession       @relation(fields: [sessionId], references: [id])
+  student   User              @relation(fields: [studentId], references: [id])
+  responses StudentResponse[]
+
+  @@unique([sessionId, studentId])
+  @@map("student_attempts")
+}
+
+model StudentResponse {
+  id             Int      @id @default(autoincrement())
+  attemptId      Int
+  questionId     Int
+  selectedOption String?  // A | B | C | D | null
+  isCorrect      Boolean  @default(false)
+  answeredAt     DateTime @default(now())
+
+  attempt  StudentAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question Question       @relation(fields: [questionId], references: [id])
+
+  @@unique([attemptId, questionId])
+  @@map("student_responses")
+}
