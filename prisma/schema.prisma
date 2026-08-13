@@ -1,0 +1,534 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ──────────────────────────────────────────────────────────
+
+enum Role {
+  super_admin
+  admin
+  exam_officer
+  teacher
+  student
+}
+
+enum QuestionStatus {
+  draft
+  pending_review
+  approved
+  rejected
+  archived
+}
+
+enum ExamStatus {
+  draft
+  published
+  finalized
+  archived
+}
+
+enum SessionStatus {
+  scheduled
+  active
+  ended
+}
+
+enum AttemptStatus {
+  in_progress
+  submitted
+  auto_submitted
+  expired
+}
+
+// ─── User ───────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  fullName     String
+  role         Role     @default(student)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  assignedSubjects TeacherSubject[]
+  createdQuestions  Question[]       @relation("QuestionCreator")
+  reviewedQuestions Question[]       @relation("QuestionReviewer")
+  createdMatrices   ExamMatrix[]
+  createdExams      Exam[]
+  createdSessions   ExamSession[]
+  sessionStudents   ExamParticipant[]
+  attempts          ExamAttempt[]
+  importBatches     QuestionImportBatch[]
+  auditLogs         AuditLog[]
+
+  @@map("users")
+}
+
+// ─── Teacher-Subject Assignment ────────────────────────────────────
+
+model TeacherSubject {
+  userId    String
+  subjectId String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+
+  @@id([userId, subjectId])
+  @@map("teacher_subjects")
+}
+
+// ─── Subject / Domain / Topic ──────────────────────────────────────
+
+model Subject {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  domains         Domain[]
+  questions       Question[]
+  matrices        ExamMatrix[]
+  teacherSubjects TeacherSubject[]
+
+  @@map("subjects")
+}
+
+model Domain {
+  id        String   @id @default(cuid())
+  subjectId String
+  code      String   @unique
+  name      String
+  isActive  Boolean  @default(true)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  subject       Subject          @relation(fields: [subjectId], references: [id])
+  topics        Topic[]
+  questions     Question[]
+  blueprintItems ExamBlueprintItem[]
+
+  @@index([subjectId])
+  @@map("domains")
+}
+
+model Topic {
+  id       String   @id @default(cuid())
+  domainId String
+  code     String   @unique
+  name     String
+  isActive Boolean  @default(true)
+  sortOrder Int     @default(0)
+  createdAt DateTime @default(now())
+
+  domain         Domain            @relation(fields: [domainId], references: [id])
+  questions      Question[]
+  blueprintItems ExamBlueprintItem[]
+
+  @@index([domainId])
+  @@map("topics")
+}
+
+// ─── Reference Data ────────────────────────────────────────────────
+
+model GradeLevel {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String
+  sortOrder Int      @default(0)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  questions Question[]
+
+  @@map("grade_levels")
+}
+
+model CognitiveLevel {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  name        String
+  description String?
+  sortOrder   Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  questions      Question[]
+  blueprintItems ExamBlueprintItem[]
+
+  @@map("cognitive_levels")
+}
+
+model DifficultyLevel {
+  id     String @id @default(cuid())
+  code   String @unique
+  name   String
+  minVal Float
+  maxVal Float
+  isActive Boolean @default(true)
+
+  blueprintItems ExamBlueprintItem[]
+  questions      Question[]
+
+  @@map("difficulty_levels")
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  questionTags QuestionTag[]
+
+  @@map("tags")
+}
+
+// ─── Question Bank ─────────────────────────────────────────────────
+
+model Question {
+  id                  String         @id @default(cuid())
+  questionCode        String         @unique
+  subjectId           String?
+  domainId            String?
+  topicId             String?
+  gradeLevelId        String?
+  cognitiveLevelId    String?
+  difficultyLevelId   String?
+  questionType        String         @default("multiple_choice")
+  estimatedDifficulty Float          @default(0.5)
+  empiricalDifficulty Float?
+  finalDifficulty     Float?
+  contextText         String?
+  questionText        String
+  optionA             String
+  optionB             String
+  optionC             String
+  optionD             String
+  correctOption       String
+  explanation         String?
+  questionImage       String?
+  createdById         String
+  status              QuestionStatus @default(draft)
+  reviewerId          String?
+  reviewNotes         String?
+  sourceReference     String?
+  usageCount          Int            @default(0)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  approvedAt          DateTime?
+  parentId            String?
+  supersededById      String?
+
+  subject        Subject?        @relation(fields: [subjectId], references: [id])
+  domain         Domain?         @relation(fields: [domainId], references: [id])
+  topic          Topic?          @relation(fields: [topicId], references: [id])
+  gradeLevel     GradeLevel?     @relation(fields: [gradeLevelId], references: [id])
+  cognitiveLevel CognitiveLevel? @relation(fields: [cognitiveLevelId], references: [id])
+  difficultyLevel DifficultyLevel? @relation(fields: [difficultyLevelId], references: [id])
+  createdBy      User            @relation("QuestionCreator", fields: [createdById], references: [id])
+  reviewedBy     User?           @relation("QuestionReviewer", fields: [reviewerId], references: [id])
+  parent         Question?       @relation("RevisionParent", fields: [parentId], references: [id])
+  childRevisions Question[]      @relation("RevisionParent")
+  supersededBy   Question?       @relation("RevisionSupersede", fields: [supersededById], references: [id])
+  superseding    Question[]      @relation("RevisionSupersede")
+
+  questionTags    QuestionTag[]
+  reviewLogs      QuestionReviewLog[]
+  attemptQuestions ExamAttemptQuestion[]
+  examQuestions   ExamQuestion[]
+
+  @@index([subjectId])
+  @@index([topicId])
+  @@index([status])
+  @@index([createdById])
+  @@index([estimatedDifficulty])
+  @@map("questions")
+}
+
+model QuestionTag {
+  questionId String
+  tagId      String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  tag        Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([questionId, tagId])
+  @@map("question_tags")
+}
+
+model QuestionReviewLog {
+  id         String   @id @default(cuid())
+  questionId String
+  changedById String?
+  oldStatus  String?
+  newStatus  String?
+  comment    String?
+  changedAt  DateTime @default(now())
+
+  question  Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+  @@map("question_review_logs")
+}
+
+// ─── Question Import ───────────────────────────────────────────────
+
+model QuestionImportBatch {
+  id          String   @id @default(cuid())
+  fileName    String
+  totalRows   Int      @default(0)
+  importedCount Int    @default(0)
+  errorCount  Int      @default(0)
+  status      String   @default("pending") // pending, confirmed, cancelled
+  importedById String
+  createdAt   DateTime @default(now())
+  confirmedAt DateTime?
+
+  importedBy User @relation(fields: [importedById], references: [id])
+  rowLogs    QuestionImportRowLog[]
+
+  @@map("question_import_batches")
+}
+
+model QuestionImportRowLog {
+  id       String @id @default(cuid())
+  batchId  String
+  rowNumber Int
+  status   String // success, error
+  error    String?
+  data     String? // JSON of row data
+
+  batch QuestionImportBatch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+  @@map("question_import_row_logs")
+}
+
+// ─── Uploaded Files ────────────────────────────────────────────────
+
+model UploadedFile {
+  id          String   @id @default(cuid())
+  fileName    String
+  fileUrl     String
+  fileType    String
+  fileSize    Int
+  uploadedById String
+  createdAt   DateTime @default(now())
+
+  @@map("uploaded_files")
+}
+
+// ─── Exam Matrix / Blueprint ───────────────────────────────────────
+
+model ExamMatrix {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  isTemplate  Boolean  @default(false)
+  subjectId   String?
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  subject   Subject? @relation(fields: [subjectId], references: [id])
+  createdBy User?    @relation(fields: [createdById], references: [id])
+  items     ExamBlueprintItem[]
+  exams     Exam[]
+
+  @@map("exam_matrices")
+}
+
+model ExamBlueprintItem {
+  id                String  @id @default(cuid())
+  matrixId          String
+  domainId          String?
+  topicId           String?
+  cognitiveLevelId  String?
+  difficultyLevelId String?
+  requiredCount     Int     @default(1)
+  createdAt         DateTime @default(now())
+
+  matrix          ExamMatrix       @relation(fields: [matrixId], references: [id], onDelete: Cascade)
+  domain          Domain?          @relation(fields: [domainId], references: [id])
+  topic           Topic?           @relation(fields: [topicId], references: [id])
+  cognitiveLevel  CognitiveLevel?  @relation(fields: [cognitiveLevelId], references: [id])
+  difficultyLevel DifficultyLevel? @relation(fields: [difficultyLevelId], references: [id])
+
+  @@index([matrixId])
+  @@map("exam_blueprint_items")
+}
+
+// ─── Exam ──────────────────────────────────────────────────────────
+
+model Exam {
+  id              String     @id @default(cuid())
+  name            String
+  code            String     @unique
+  matrixId        String?
+  status          ExamStatus @default(draft)
+  createdById     String?
+  maxAttempts     Int        @default(1)
+  showResults     Boolean    @default(true)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  finalizedAt     DateTime?
+
+  matrix    ExamMatrix? @relation(fields: [matrixId], references: [id])
+  createdBy User?       @relation(fields: [createdById], references: [id])
+  sessions  ExamSession[]
+  examQuestions ExamQuestion[]
+
+  @@map("exams")
+}
+
+model ExamQuestion {
+  id           String   @id @default(cuid())
+  examId       String
+  questionId   String
+  displayOrder Int      @default(0)
+  optionMap    String?  // JSON: shuffle mapping
+  createdAt    DateTime @default(now())
+
+  exam     Exam     @relation(fields: [examId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id])
+
+  @@unique([examId, questionId])
+  @@index([examId])
+  @@map("exam_questions")
+}
+
+// ─── Exam Session ──────────────────────────────────────────────────
+
+model ExamSession {
+  id              String        @id @default(cuid())
+  examId          String
+  name            String
+  startTime       DateTime?
+  endTime         DateTime?
+  durationMinutes Int           @default(60)
+  status          SessionStatus @default(scheduled)
+  createdById     String?
+  createdAt       DateTime      @default(now())
+
+  exam         Exam              @relation(fields: [examId], references: [id])
+  createdBy    User?             @relation(fields: [createdById], references: [id])
+  participants ExamParticipant[]
+  attempts     ExamAttempt[]
+
+  @@index([examId])
+  @@map("exam_sessions")
+}
+
+model ExamParticipant {
+  sessionId String
+  studentId String
+  invitedAt DateTime @default(now())
+
+  session ExamSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student User        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@id([sessionId, studentId])
+  @@map("exam_participants")
+}
+
+// ─── Exam Attempt ──────────────────────────────────────────────────
+
+model ExamAttempt {
+  id          String        @id @default(cuid())
+  sessionId   String
+  studentId   String
+  startedAt   DateTime      @default(now())
+  submittedAt DateTime?
+  lastSavedAt DateTime?
+  expiredAt   DateTime?
+  score       Float?
+  numCorrect  Int?
+  numWrong    Int?
+  status      AttemptStatus @default(in_progress)
+  seed        String?
+
+  session   ExamSession           @relation(fields: [sessionId], references: [id])
+  student   User                  @relation(fields: [studentId], references: [id])
+  questions ExamAttemptQuestion[]
+  answers   ExamAnswer[]
+
+  @@unique([sessionId, studentId])
+  @@index([sessionId])
+  @@index([studentId])
+  @@map("exam_attempts")
+}
+
+model ExamAttemptQuestion {
+  id             String @id @default(cuid())
+  attemptId      String
+  questionId     String
+  displayOrder   Int    @default(0)
+  // Snapshot of question content at time of attempt
+  snapshotContent String  // JSON: full question snapshot
+  // Option shuffle mapping: displayed position -> original position
+  optionMap      String  // JSON: e.g. {"A":"C","B":"A","C":"D","D":"B"}
+
+  attempt  ExamAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question Question    @relation(fields: [questionId], references: [id])
+  answers  ExamAnswer[]
+
+  @@unique([attemptId, questionId])
+  @@index([attemptId])
+  @@map("exam_attempt_questions")
+}
+
+model ExamAnswer {
+  id             String   @id @default(cuid())
+  attemptId      String
+  attemptQuestionId String
+  questionId     String
+  selectedOption String?  // What student selected (in displayed order)
+  originalOption String?  // Mapped back to original bank order
+  isCorrect      Boolean  @default(false)
+  answeredAt     DateTime @default(now())
+
+  attempt         ExamAttempt         @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  attemptQuestion ExamAttemptQuestion @relation(fields: [attemptQuestionId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, questionId])
+  @@index([attemptId])
+  @@map("exam_answers")
+}
+
+// ─── Audit Log ─────────────────────────────────────────────────────
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  module    String
+  targetId  String?
+  details   String?  // JSON
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([module])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// ─── System Settings ───────────────────────────────────────────────
+
+model SystemSetting {
+  id          String   @id @default(cuid())
+  key         String   @unique
+  value       String
+  description String?
+  updatedAt   DateTime @updatedAt
+
+  @@map("system_settings")
+}
