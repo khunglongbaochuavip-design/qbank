@@ -1,7 +1,7 @@
 'use client';
 import React, { useEffect, useState } from 'react';
 import { Table, Button, Tag, Space, Input, Select, Modal, Form, message, Popconfirm } from 'antd';
-import { PlusOutlined, SearchOutlined, EditOutlined, DeleteOutlined, EyeOutlined, SendOutlined, CheckOutlined, CloseOutlined } from '@ant-design/icons';
+import { PlusOutlined, SearchOutlined, EditOutlined, DeleteOutlined, EyeOutlined, SendOutlined, CheckOutlined, CloseOutlined, ExportOutlined } from '@ant-design/icons';
 import { api } from '@/lib/api-client';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { QUESTION_STATUS_LABELS, QUESTION_STATUS_COLORS } from '@/lib/constants';
@@ -15,6 +15,15 @@ export default function QuestionsPage() {
   const router = useRouter();
   const [data, setData] = useState<{ total: number; data: Record<string, unknown>[] }>({ total: 0, data: [] });
   const [loading, setLoading] = useState(true);
+
+  const onExport = () => {
+    const qs = new URLSearchParams();
+    if (filters.search) qs.set('search', filters.search);
+    if (filters.status) qs.set('status', filters.status);
+    if (filters.subjectId) qs.set('subjectId', filters.subjectId);
+    api.download(`/questions/export?${qs}`, 'qbank_questions_export.xlsx');
+  };
+
   const [filters, setFilters] = useState({ search: '', status: '', subjectId: '', page: 1, pageSize: 20 });
   const [subjects, setSubjects] = useState<{ id: string; name: string }[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
@@ -152,10 +161,15 @@ export default function QuestionsPage() {
     <div>
       <div className="page-header">
         <h2>📝 Ngân hàng Câu hỏi</h2>
-        <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}
-          style={{ background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', borderRadius: 10, fontWeight: 600 }}>
-          Tạo câu hỏi
-        </Button>
+        <Space>
+          <Button icon={<ExportOutlined />} onClick={onExport} style={{ borderRadius: 10, fontWeight: 600 }}>
+            Xuất Excel
+          </Button>
+          <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}
+            style={{ background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', borderRadius: 10, fontWeight: 600 }}>
+            Tạo câu hỏi
+          </Button>
+        </Space>
       </div>
 
       <div className="filter-bar">

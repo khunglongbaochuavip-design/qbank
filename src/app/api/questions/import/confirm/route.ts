@@ -29,8 +29,9 @@ export async function POST(request: Request) {
       const data = JSON.parse(row.data);
 
       try {
-        qIdx++;
-        const questionCode = String(qIdx + 10000).padStart(6, '0');
+        const timestamp = Date.now().toString(36).toUpperCase();
+        const rand = Math.random().toString(36).substring(2, 5).toUpperCase();
+        const questionCode = `Q${timestamp}${rand}`;
 
         // Handle tags
         let tagCreate = undefined;
@@ -58,6 +59,7 @@ export async function POST(request: Request) {
             domainId: data.domainId || null,
             topicId: data.topicId || null,
             cognitiveLevelId: data.cognitiveLevelId || null,
+            difficultyLevelId: data.difficultyLevelId || null,
             estimatedDifficulty: data.estimatedDifficulty || 0.5,
             contextText: data.contextText || null,
             explanation: data.explanation || null,
