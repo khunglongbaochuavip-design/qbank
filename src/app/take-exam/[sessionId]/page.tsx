@@ -129,7 +129,7 @@ function TakeExamInner() {
                   border: answers[q.id as string] === opt ? '2px solid #3b82f6' : '1px solid #e2e8f0',
                   background: answers[q.id as string] === opt ? '#eff6ff' : '#fff',
                   cursor: 'pointer', transition: 'all 0.15s',
-                }} onClick={() => onSelectOption(q.id as string, opt)}>
+                }}>
                   <Radio value={opt}>
                     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, verticalAlign: 'middle' }}>
                       <strong>{opt}.</strong>

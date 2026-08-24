@@ -9,6 +9,27 @@ const sessionInclude = {
   _count: { select: { attempts: true } },
 };
 
+/** Generate a short human-readable 6-char join code (uppercase letters + digits, no ambiguous chars) */
+function generateAccessCode(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // exclude 0,O,1,I
+  let code = '';
+  for (let i = 0; i < 6; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
+}
+
+/** Ensure the generated code is unique in the DB */
+async function uniqueAccessCode(): Promise<string> {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const code = generateAccessCode();
+    const existing = await prisma.examSession.findUnique({ where: { accessCode: code } });
+    if (!existing) return code;
+  }
+  // Fallback: timestamp-based code
+  return `E${Date.now().toString(36).toUpperCase().slice(-5)}`;
+}
+
 export async function GET(request: Request) {
   try {
     const user = await requireAuth(request);
@@ -57,12 +78,15 @@ export async function POST(request: Request) {
     const user = await requireMinRole(request, 'exam_officer');
     if (user instanceof NextResponse) return user;
 
-    const { examId, name, startTime, endTime, durationMinutes, studentIds } = await request.json();
+    const { examId, name, startTime, endTime, durationMinutes, studentIds, allowSelfJoin } = await request.json();
     if (!examId || !name) return badRequest('Thiếu thông tin bắt buộc.');
 
     const exam = await prisma.exam.findUnique({ where: { id: examId } });
     if (!exam) return notFound('Không tìm thấy đề thi.');
     if (exam.status !== 'finalized') return badRequest('Chỉ có thể tạo phiên thi từ đề thi đã chốt.');
+
+    // Always generate an access code so students can always join via code
+    const accessCode = await uniqueAccessCode();
 
     const session = await prisma.examSession.create({
       data: {
@@ -70,7 +94,10 @@ export async function POST(request: Request) {
         startTime: startTime ? new Date(startTime) : null,
         endTime: endTime ? new Date(endTime) : null,
         durationMinutes: Number(durationMinutes) || 60,
-        status: 'scheduled', createdById: user.id,
+        status: 'scheduled',
+        accessCode,
+        allowSelfJoin: allowSelfJoin === true,
+        createdById: user.id,
         participants: studentIds?.length ? {
           create: studentIds.map((sid: string) => ({ studentId: sid })),
         } : undefined,

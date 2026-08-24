@@ -413,6 +413,8 @@ model ExamSession {
   endTime         DateTime?
   durationMinutes Int           @default(60)
   status          SessionStatus @default(scheduled)
+  accessCode      String?       @unique
+  allowSelfJoin   Boolean       @default(false)
   createdById     String?
   createdAt       DateTime      @default(now())
 

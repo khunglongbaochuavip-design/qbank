@@ -28,11 +28,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (!session) return notFound('Không tìm thấy phiên thi.');
     if (session.status !== 'active') return badRequest('Phiên thi chưa bắt đầu hoặc đã kết thúc.');
 
-    // Check assignment
+    // Check assignment — covers both manually added and self-joined via access code
     const assigned = await prisma.examParticipant.findUnique({
       where: { sessionId_studentId: { sessionId, studentId: user.id } },
     });
-    if (!assigned) return forbidden('Bạn không được phân công vào phiên thi này.');
+    if (!assigned) return forbidden('Bạn không được phân công vào phiên thi này. Hãy dùng mã tham gia trên trang "Bài thi của tôi".');
 
     // Check existing attempt
     let attempt = await prisma.examAttempt.findUnique({
