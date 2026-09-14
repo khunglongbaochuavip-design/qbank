@@ -56,25 +56,38 @@ export default function QuestionsPage() {
   }, []);
   useEffect(load, [filters]);
 
-  const loadDomains = async (subjectId: string) => {
+  // Load domains for a subject.
+  // resetFields=true khi người dùng chủ động đổi môn học (cần reset domain/topic đang chọn).
+  // resetFields=false khi mở form sửa (chỉ load danh sách để dropdown có options, KHÔNG xóa giá trị cũ).
+  const loadDomains = async (subjectId: string, resetFields = true) => {
     const d = await api.get<Record<string, unknown>[]>(`/domains?subjectId=${subjectId}`);
     setDomains(d);
-    setTopics([]);
-    form.setFieldsValue({ domainId: null, topicId: null });
-  };
-  const loadTopics = async (domainId: string) => {
-    const t = await api.get<Record<string, unknown>[]>(`/topics?domainId=${domainId}`);
-    setTopics(t);
-    form.setFieldsValue({ topicId: null });
+    if (resetFields) {
+      setTopics([]);
+      form.setFieldsValue({ domainId: null, topicId: null });
+    }
   };
 
-  const openCreate = () => { setEditItem(null); form.resetFields(); setModalOpen(true); };
-  const openEdit = (rec: Record<string, unknown>) => {
+  // Load topics for a domain.
+  // resetFields=true khi người dùng chủ động đổi lĩnh vực (cần reset topic đang chọn).
+  // resetFields=false khi mở form sửa (chỉ load danh sách để dropdown có options, KHÔNG xóa giá trị cũ).
+  const loadTopics = async (domainId: string, resetFields = true) => {
+    const t = await api.get<Record<string, unknown>[]>(`/topics?domainId=${domainId}`);
+    setTopics(t);
+    if (resetFields) {
+      form.setFieldsValue({ topicId: null });
+    }
+  };
+
+  const openCreate = () => { setEditItem(null); form.resetFields(); setDomains([]); setTopics([]); setModalOpen(true); };
+  const openEdit = async (rec: Record<string, unknown>) => {
     setEditItem(rec);
     const tagIds = (rec.questionTags as { tagId?: string; tag?: { id: string } }[])?.map(qt => qt.tagId || qt.tag?.id).filter(Boolean) || [];
+    // Set form values FIRST (including domainId and topicId)
     form.setFieldsValue({ ...rec, tagIds, difficultyLevelId: rec.difficultyLevelId || null });
-    if (rec.subjectId) loadDomains(rec.subjectId as string);
-    if (rec.domainId) loadTopics(rec.domainId as string);
+    // Then load dropdown options WITHOUT resetting the already-set form values
+    if (rec.subjectId) await loadDomains(rec.subjectId as string, false);
+    if (rec.domainId) await loadTopics(rec.domainId as string, false);
     setModalOpen(true);
   };
 
