@@ -81,7 +81,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { questionText, optionA, optionB, optionC, optionD, correctOption,
       subjectId, domainId, topicId, gradeLevelId, cognitiveLevelId, difficultyLevelId,
-      estimatedDifficulty, contextText, explanation, sourceReference,
+      estimatedDifficulty, contextText, explanation, sourceReference, questionImage,
       status: reqStatus, tagIds } = body;
 
     if (!questionText || !optionA || !optionB || !optionC || !optionD || !correctOption) {
@@ -117,6 +117,7 @@ export async function POST(request: Request) {
         difficultyLevelId: difficultyLevelId || null,
         estimatedDifficulty: estimatedDifficulty ? Number(estimatedDifficulty) : 0.5,
         contextText, explanation, sourceReference,
+        questionImage: questionImage || null,
         status: newStatus as 'draft' | 'pending_review' | 'approved' | 'rejected' | 'archived',
         createdById: user.id,
         questionTags: tagIds?.length ? { create: tagIds.map((id: string) => ({ tagId: id })) } : undefined,

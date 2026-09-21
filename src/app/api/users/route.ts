@@ -19,11 +19,12 @@ export async function GET(request: Request) {
     if (search) where.OR = [
       { fullName: { contains: search, mode: 'insensitive' } },
       { email: { contains: search, mode: 'insensitive' } },
+      { studentCode: { contains: search, mode: 'insensitive' } },
     ];
 
     const users = await prisma.user.findMany({
       where,
-      select: { id: true, email: true, fullName: true, role: true, isActive: true, createdAt: true, assignedSubjects: { include: { subject: true } } },
+      select: { id: true, email: true, fullName: true, role: true, isActive: true, createdAt: true, studentCode: true, className: true, assignedSubjects: { include: { subject: true } } },
       orderBy: { createdAt: 'desc' },
     });
     return success(users);
@@ -39,7 +40,7 @@ export async function POST(request: Request) {
     if (user instanceof NextResponse) return user;
 
     const body = await request.json();
-    const { email, password, fullName, role, subjectIds } = body;
+    const { email, password, fullName, role, subjectIds, studentCode, className } = body;
 
     if (!email || !password || !fullName || !role) {
       return badRequest('Thiếu thông tin bắt buộc.');
@@ -58,7 +59,11 @@ export async function POST(request: Request) {
     if (existing) return badRequest('Email đã được sử dụng.');
 
     const passwordHash = await hashPassword(password);
-    const userData: Record<string, unknown> = { email, passwordHash, fullName, role };
+    const userData: Record<string, unknown> = {
+      email, passwordHash, fullName, role,
+      studentCode: studentCode || null,
+      className: className || null,
+    };
 
     if (role === 'teacher' && Array.isArray(subjectIds) && subjectIds.length > 0) {
       userData.assignedSubjects = {
@@ -68,7 +73,7 @@ export async function POST(request: Request) {
 
     const newUser = await prisma.user.create({
       data: userData as Parameters<typeof prisma.user.create>[0]['data'],
-      select: { id: true, email: true, fullName: true, role: true, isActive: true, createdAt: true, assignedSubjects: { include: { subject: true } } },
+      select: { id: true, email: true, fullName: true, role: true, isActive: true, createdAt: true, studentCode: true, className: true, assignedSubjects: { include: { subject: true } } },
     });
 
     await logAction({ userId: user.id, action: 'CREATE', module: 'USER', targetId: newUser.id, ipAddress: getClientIP(request) });

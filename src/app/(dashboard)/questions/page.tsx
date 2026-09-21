@@ -1,7 +1,7 @@
 'use client';
 import React, { useEffect, useState } from 'react';
-import { Table, Button, Tag, Space, Input, Select, Modal, Form, message, Popconfirm } from 'antd';
-import { PlusOutlined, SearchOutlined, EditOutlined, DeleteOutlined, EyeOutlined, SendOutlined, CheckOutlined, CloseOutlined, ExportOutlined } from '@ant-design/icons';
+import { Table, Button, Tag, Space, Input, Select, Modal, Form, message, Popconfirm, Upload, Image } from 'antd';
+import { PlusOutlined, SearchOutlined, EditOutlined, DeleteOutlined, EyeOutlined, SendOutlined, CheckOutlined, CloseOutlined, ExportOutlined, UploadOutlined } from '@ant-design/icons';
 import { api } from '@/lib/api-client';
 import { useAuth } from '@/components/providers/AuthProvider';
 import { QUESTION_STATUS_LABELS, QUESTION_STATUS_COLORS } from '@/lib/constants';
@@ -35,6 +35,7 @@ export default function QuestionsPage() {
   const [cogLevels, setCogLevels] = useState<Record<string, unknown>[]>([]);
   const [diffLevels, setDiffLevels] = useState<Record<string, unknown>[]>([]);
   const [tags, setTags] = useState<{ id: string; name: string }[]>([]);
+  const [questionImage, setQuestionImage] = useState<string | null>(null);
 
   const load = () => {
     setLoading(true);
@@ -79,12 +80,13 @@ export default function QuestionsPage() {
     }
   };
 
-  const openCreate = () => { setEditItem(null); form.resetFields(); setDomains([]); setTopics([]); setModalOpen(true); };
+  const openCreate = () => { setEditItem(null); form.resetFields(); setDomains([]); setTopics([]); setQuestionImage(null); setModalOpen(true); };
   const openEdit = async (rec: Record<string, unknown>) => {
     setEditItem(rec);
     const tagIds = (rec.questionTags as { tagId?: string; tag?: { id: string } }[])?.map(qt => qt.tagId || qt.tag?.id).filter(Boolean) || [];
     // Set form values FIRST (including domainId and topicId)
     form.setFieldsValue({ ...rec, tagIds, difficultyLevelId: rec.difficultyLevelId || null });
+    setQuestionImage((rec.questionImage as string) || null);
     // Then load dropdown options WITHOUT resetting the already-set form values
     if (rec.subjectId) await loadDomains(rec.subjectId as string, false);
     if (rec.domainId) await loadTopics(rec.domainId as string, false);
@@ -95,11 +97,12 @@ export default function QuestionsPage() {
   const onSave = async () => {
     try {
       const values = await form.validateFields();
+      const payload = { ...values, questionImage: questionImage || null };
       if (editItem) {
-        await api.patch(`/questions/${(editItem as Record<string, unknown>).id}`, values);
+        await api.patch(`/questions/${(editItem as Record<string, unknown>).id}`, payload);
         message.success('Đã cập nhật câu hỏi.');
       } else {
-        await api.post('/questions', values);
+        await api.post('/questions', payload);
         message.success('Đã tạo câu hỏi mới.');
       }
       setModalOpen(false);
@@ -276,6 +279,37 @@ export default function QuestionsPage() {
               <MathEditor placeholder="Giải thích đáp án..." rows={2} />
             </Form.Item>
           </div>
+
+          {/* Image upload section */}
+          <Form.Item label="Hình ảnh minh hoạ (tuỳ chọn)">
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+              <Upload
+                accept="image/*"
+                showUploadList={false}
+                beforeUpload={(file) => {
+                  const isLt2M = file.size / 1024 / 1024 < 2;
+                  if (!isLt2M) { message.error('Ảnh phải nhỏ hơn 2MB!'); return false; }
+                  const reader = new FileReader();
+                  reader.onload = (e) => setQuestionImage(e.target?.result as string);
+                  reader.readAsDataURL(file);
+                  return false; // prevent auto-upload
+                }}
+              >
+                <Button icon={<UploadOutlined />}>Chọn ảnh từ máy</Button>
+              </Upload>
+              {questionImage && (
+                <div style={{ position: 'relative', display: 'inline-block' }}>
+                  <Image src={questionImage} alt="preview" style={{ maxHeight: 120, maxWidth: 200, borderRadius: 8, border: '1px solid #e2e8f0' }} />
+                  <Button size="small" danger style={{ position: 'absolute', top: -8, right: -8, borderRadius: '50%', padding: '0 6px' }}
+                    onClick={() => setQuestionImage(null)}>×</Button>
+                </div>
+              )}
+            </div>
+            <div style={{ marginTop: 6, color: '#64748b', fontSize: 12 }}>
+              Hỗ trợ JPG, PNG, GIF · Tối đa 2MB · Ảnh được lưu cùng câu hỏi
+            </div>
+          </Form.Item>
+
         </Form>
       </Modal>
     </div>

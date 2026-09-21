@@ -141,6 +141,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         optionC: q.optionC,
         optionD: q.optionD,
         correctOption: q.correctOption,
+        explanation: q.explanation,
       };
 
       snapshotData.push({

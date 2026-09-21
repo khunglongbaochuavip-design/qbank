@@ -53,6 +53,8 @@ model User {
   fullName     String
   role         Role     @default(student)
   isActive     Boolean  @default(true)
+  studentCode  String?  @unique
+  className    String?
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 

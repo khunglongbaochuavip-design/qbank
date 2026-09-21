@@ -36,6 +36,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         displayOrder: aq.displayOrder,
         questionText: snapshot.questionText,
         contextText: snapshot.contextText,
+        questionImage: snapshot.questionImage,
         optionA: snapshot[`option${optionMap.A}`],
         optionB: snapshot[`option${optionMap.B}`],
         optionC: snapshot[`option${optionMap.C}`],

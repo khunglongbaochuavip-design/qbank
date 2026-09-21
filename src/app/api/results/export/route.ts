@@ -19,7 +19,7 @@ export async function GET(request: Request) {
         attempts: {
           where: { status: { in: ['submitted', 'auto_submitted', 'expired'] } },
           include: {
-            student: { select: { id: true, fullName: true, email: true } },
+            student: { select: { id: true, fullName: true, email: true, studentCode: true, className: true } },
             answers: true,
             questions: { orderBy: { displayOrder: 'asc' } },
           },
@@ -37,8 +37,9 @@ export async function GET(request: Request) {
     const wsA = wb.addWorksheet('A. Tổng hợp');
     wsA.columns = [
       { header: 'STT', width: 6 },
-      { header: 'Mã học sinh', width: 20 },
+      { header: 'Mã học sinh', width: 15 },
       { header: 'Họ tên', width: 25 },
+      { header: 'Lớp/Nhóm', width: 15 },
       { header: 'Email', width: 30 },
       { header: 'Điểm (thang 10)', width: 15 },
       { header: 'Số câu đúng', width: 13 },
@@ -49,7 +50,8 @@ export async function GET(request: Request) {
     wsA.getRow(1).eachCell(c => { c.font = { bold: true, color: { argb: 'FFFFFFFF' } }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } }; });
 
     session.attempts.forEach((att, i) => {
-      wsA.addRow([i + 1, att.student.id.substring(0, 8), att.student.fullName, att.student.email, att.score, att.numCorrect, att.numWrong, att.status, att.submittedAt?.toLocaleString('vi-VN')]);
+      const s = att.student as { id: string; fullName: string; email: string; studentCode?: string | null; className?: string | null };
+      wsA.addRow([i + 1, s.studentCode || s.id.substring(0, 8), s.fullName, s.className || '—', s.email, att.score, att.numCorrect, att.numWrong, att.status, att.submittedAt?.toLocaleString('vi-VN')]);
     });
 
     // Sheet B: Item Response Matrix (normalized so correct=A)
