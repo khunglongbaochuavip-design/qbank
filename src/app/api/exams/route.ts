@@ -45,7 +45,7 @@ export async function POST(request: Request) {
     const user = await requireMinRole(request, 'exam_officer');
     if (user instanceof NextResponse) return user;
 
-    const { name, matrixId, numberOfVariants = 1 } = await request.json();
+    const { name, matrixId, numberOfVariants = 1, questionIds } = await request.json();
     if (!name || !matrixId) return badRequest('Tên đề thi và ma trận là bắt buộc.');
 
     const matrix = await prisma.examMatrix.findUnique({
@@ -54,38 +54,56 @@ export async function POST(request: Request) {
     });
     if (!matrix) return badRequest('Không tìm thấy ma trận.');
 
-    // Select questions from matrix items
-    const selectedQuestions: { id: string; [key: string]: unknown }[] = [];
+    let selectedQuestions: { id: string; [key: string]: unknown }[] = [];
     const warnings: string[] = [];
 
-    for (const item of matrix.items) {
-      const where: Record<string, unknown> = { status: 'approved' };
-      if (item.domainId) where.domainId = item.domainId;
-      if (item.topicId) where.topicId = item.topicId;
-      if (item.cognitiveLevelId) where.cognitiveLevelId = item.cognitiveLevelId;
-      if (item.difficultyLevel) {
-        where.estimatedDifficulty = { gte: item.difficultyLevel.minVal, lte: item.difficultyLevel.maxVal };
-      }
-      if (selectedQuestions.length > 0) {
-        where.id = { notIn: selectedQuestions.map(q => q.id) };
-      }
+    if (Array.isArray(questionIds) && questionIds.length > 0) {
+      // === MANUAL SELECTION: user picked specific question IDs ===
+      const qs = await prisma.question.findMany({
+        where: { id: { in: questionIds }, status: 'approved' },
+      });
+      // Preserve user-defined order
+      selectedQuestions = questionIds
+        .map(id => qs.find(q => q.id === id))
+        .filter(Boolean) as typeof selectedQuestions;
 
-      const available = await prisma.question.findMany({ where });
+      if (selectedQuestions.length === 0) {
+        return badRequest('Không có câu hỏi hợp lệ nào được chọn. Câu hỏi phải ở trạng thái Đã duyệt.');
+      }
+    } else {
+      // === AUTO SELECTION: stratified random from matrix criteria ===
+      for (const item of matrix.items) {
+        const where: Record<string, unknown> = { status: 'approved' };
+        if (item.domainId) where.domainId = item.domainId;
+        if (item.topicId) where.topicId = item.topicId;
+        if (item.cognitiveLevelId) where.cognitiveLevelId = item.cognitiveLevelId;
+        if (item.difficultyLevel) {
+          where.estimatedDifficulty = { gte: item.difficultyLevel.minVal, lte: item.difficultyLevel.maxVal };
+        }
+        if (selectedQuestions.length > 0) {
+          where.id = { notIn: selectedQuestions.map(q => q.id) };
+        }
 
-      if (available.length < item.requiredCount) {
-        warnings.push(`Không đủ câu hỏi: cần ${item.requiredCount} nhưng chỉ có ${available.length}`);
-        available.forEach(q => selectedQuestions.push(q));
-      } else {
-        // Stratified random selection
-        const sorted = [...available].sort((a, b) => a.estimatedDifficulty - b.estimatedDifficulty);
-        for (let i = 0; i < item.requiredCount; i++) {
-          const startIdx = Math.floor((i * sorted.length) / item.requiredCount);
-          const endIdx = Math.floor(((i + 1) * sorted.length) / item.requiredCount);
-          const bucket = sorted.slice(startIdx, endIdx);
-          if (bucket.length > 0) {
-            selectedQuestions.push(bucket[Math.floor(Math.random() * bucket.length)]);
+        const available = await prisma.question.findMany({ where });
+
+        if (available.length < item.requiredCount) {
+          warnings.push(`Ô ma trận cần ${item.requiredCount} câu nhưng ngân hàng chỉ có ${available.length} câu phù hợp.`);
+          available.forEach(q => selectedQuestions.push(q));
+        } else {
+          const sorted = [...available].sort((a, b) => a.estimatedDifficulty - b.estimatedDifficulty);
+          for (let i = 0; i < item.requiredCount; i++) {
+            const startIdx = Math.floor((i * sorted.length) / item.requiredCount);
+            const endIdx = Math.floor(((i + 1) * sorted.length) / item.requiredCount);
+            const bucket = sorted.slice(startIdx, endIdx);
+            if (bucket.length > 0) {
+              selectedQuestions.push(bucket[Math.floor(Math.random() * bucket.length)]);
+            }
           }
         }
+      }
+
+      if (selectedQuestions.length === 0) {
+        return badRequest('Ngân hàng câu hỏi chưa có câu nào ở trạng thái Đã duyệt phù hợp với ma trận này. Hãy duyệt câu hỏi trước khi tạo đề thi.');
       }
     }
 
@@ -100,7 +118,7 @@ export async function POST(request: Request) {
 
       const exam = await prisma.exam.create({
         data: {
-          name: numberOfVariants > 1 ? `${name} (Mã ${"ABCDEFGHIJKLMNOPQRSTUVWXYZ"[(variant - 1) % 26]})` : name,
+          name: numberOfVariants > 1 ? `${name} (Mã ${'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[(variant - 1) % 26]})` : name,
           code: examCode.substring(0, 50),
           matrixId, status: 'draft', createdById: user.id,
           examQuestions: {
@@ -120,9 +138,12 @@ export async function POST(request: Request) {
     }
 
     await logAction({ userId: user.id, action: 'GENERATE_EXAM', module: 'EXAM', targetId: createdExams[0]?.id, details: { matrixId, variants: numberOfVariants }, ipAddress: getClientIP(request) });
-    return success(numberOfVariants > 1 ? createdExams : createdExams[0], 201);
+
+    const result = numberOfVariants > 1 ? createdExams : createdExams[0];
+    return success({ exam: result, warnings }, 201);
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: 'Lỗi hệ thống.' }, { status: 500 });
   }
 }
+
