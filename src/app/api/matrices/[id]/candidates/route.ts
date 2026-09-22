@@ -34,7 +34,10 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       if (item.domainId) where.domainId = item.domainId;
       if (item.topicId) where.topicId = item.topicId;
       if (item.cognitiveLevelId) where.cognitiveLevelId = item.cognitiveLevelId;
-      if (item.difficultyLevel) {
+      // Filter by difficultyLevelId directly (most reliable) — fallback to estimatedDifficulty range
+      if (item.difficultyLevelId) {
+        where.difficultyLevelId = item.difficultyLevelId;
+      } else if (item.difficultyLevel) {
         where.estimatedDifficulty = {
           gte: item.difficultyLevel.minVal,
           lte: item.difficultyLevel.maxVal,
