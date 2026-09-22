@@ -99,6 +99,17 @@ export default function ReviewPage() {
               <MathRenderer content={viewItem.questionText as string} />
             </div>
 
+            {(viewItem.questionImage as string) && (
+              <div style={{ textAlign: 'center', marginBottom: 14 }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={viewItem.questionImage as string}
+                  alt="Hình ảnh câu hỏi"
+                  style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 8, border: '1px solid #e2e8f0', objectFit: 'contain' }}
+                />
+              </div>
+            )}
+
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
               {(['A', 'B', 'C', 'D'] as const).map(opt => (
                 <div key={opt} style={{

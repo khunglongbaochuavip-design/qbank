@@ -54,33 +54,66 @@ export async function GET(request: Request) {
       wsA.addRow([i + 1, s.studentCode || s.id.substring(0, 8), s.fullName, s.className || '—', s.email, att.score, att.numCorrect, att.numWrong, att.status, att.submittedAt?.toLocaleString('vi-VN')]);
     });
 
-    // Sheet B: Item Response Matrix (normalized so correct=A)
+    // Sheet B: Item Response Matrix (chuẩn phân tích tâm trắc)
+    // Hàng 1: A1="Họ và tên", B1..=mã câu hỏi
+    // Hàng 2: A2="Đáp án", B2..=đáp án gốc đúng của từng câu
+    // Hàng 3+: tên thí sinh + lựa chọn đã quy về đáp án gốc
     const wsB = wb.addWorksheet('B. Ma trận phản hồi');
-    const headerB = ['Họ tên', ...examQuestions.map((_, i) => `C${i + 1}`)];
-    wsB.addRow(headerB);
-    wsB.getRow(1).eachCell(c => { c.font = { bold: true, color: { argb: 'FFFFFFFF' } }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF059669' } }; });
 
+    // Row 1: headers — question codes
+    const row1Values = ['Họ và tên', ...examQuestions.map((eq, i) => eq.question.questionCode || `C${i + 1}`)];
+    const row1 = wsB.addRow(row1Values);
+    row1.eachCell(c => {
+      c.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF059669' } };
+      c.alignment = { horizontal: 'center', vertical: 'middle' };
+    });
+    wsB.getColumn(1).width = 28;
+    examQuestions.forEach((_, i) => { wsB.getColumn(i + 2).width = Math.max(14, (examQuestions[i].question.questionCode || `C${i+1}`).length + 4); });
+
+    // Row 2: correct answer key
+    const row2Values = ['Đáp án', ...examQuestions.map(eq => eq.question.correctOption)];
+    const row2 = wsB.addRow(row2Values);
+    row2.getCell(1).font = { bold: true, italic: true };
+    row2.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF9C3' } };
+    row2.eachCell((c, col) => {
+      if (col > 1) {
+        c.font = { bold: true, color: { argb: 'FF16A34A' } };
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF0FDF4' } };
+        c.alignment = { horizontal: 'center' };
+      }
+    });
+
+    // Rows 3+: each student's answers (originalOption — already mapped back to original key)
     for (const att of session.attempts) {
-      const row: (string | null)[] = [att.student.fullName];
+      const s = att.student as { id: string; fullName: string; studentCode?: string | null };
+      const label = s.studentCode ? `${s.studentCode} — ${att.student.fullName}` : att.student.fullName;
+      const rowData: (string | null)[] = [label];
       for (const eq of examQuestions) {
         const ans = att.answers.find(a => a.questionId === eq.questionId);
-        if (!ans || !ans.originalOption) {
-          row.push(null);
-          continue;
-        }
-        // Normalize: map answer to position relative to correct answer
-        // Correct answer always maps to "A"
-        const correctOption = eq.question.correctOption;
-        const options = ['A', 'B', 'C', 'D'];
-        const correctIdx = options.indexOf(correctOption);
-        const answerIdx = options.indexOf(ans.originalOption);
-        const normalizedIdx = ((answerIdx - correctIdx + 4) % 4);
-        row.push(options[normalizedIdx]);
+        rowData.push(ans?.originalOption || null);
       }
-      wsB.addRow(row);
+      const r = wsB.addRow(rowData);
+      r.eachCell((c, col) => {
+        if (col > 1) {
+          c.alignment = { horizontal: 'center' };
+          // Highlight correct answers green, wrong answers red
+          const correct = examQuestions[col - 2]?.question.correctOption;
+          const chosen = rowData[col - 1];
+          if (chosen && correct) {
+            if (chosen === correct) {
+              c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD1FAE5' } };
+              c.font = { color: { argb: 'FF065F46' } };
+            } else {
+              c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEE2E2' } };
+              c.font = { color: { argb: 'FF991B1B' } };
+            }
+          }
+        }
+      });
     }
 
-    // Sheet C: Item Metadata
+    // Sheet C: Item Metadata (giữ nguyên)
     const wsC = wb.addWorksheet('C. Thông tin câu hỏi');
     wsC.columns = [
       { header: 'Câu', width: 8 },
@@ -96,24 +129,7 @@ export async function GET(request: Request) {
       wsC.addRow([i + 1, eq.question.questionCode, eq.question.subject?.name || '', eq.question.topic?.name || '', eq.question.estimatedDifficulty, eq.question.correctOption]);
     });
 
-    // Sheet D: Detailed Responses
-    const wsD = wb.addWorksheet('D. Chi tiết');
-    wsD.columns = [
-      { header: 'Họ tên', width: 25 },
-      { header: 'Câu', width: 8 },
-      { header: 'Mã câu hỏi', width: 25 },
-      { header: 'Đáp án chọn (hiển thị)', width: 22 },
-      { header: 'Đáp án chọn (gốc)', width: 20 },
-      { header: 'Đúng/Sai', width: 10 },
-    ];
-    wsD.getRow(1).eachCell(c => { c.font = { bold: true, color: { argb: 'FFFFFFFF' } }; c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF8B5CF6' } }; });
-
-    for (const att of session.attempts) {
-      for (const eq of examQuestions) {
-        const ans = att.answers.find(a => a.questionId === eq.questionId);
-        wsD.addRow([att.student.fullName, eq.displayOrder, eq.question.questionCode, ans?.selectedOption || '—', ans?.originalOption || '—', ans?.isCorrect ? 'Đúng' : 'Sai']);
-      }
-    }
+    // Sheet D đã bị xóa theo yêu cầu
 
     const buffer = await wb.xlsx.writeBuffer();
     await logAction({ userId: user.id, action: 'EXPORT_RESULTS', module: 'RESULT', details: { sessionId }, ipAddress: getClientIP(request) });

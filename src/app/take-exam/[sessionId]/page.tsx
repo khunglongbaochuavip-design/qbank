@@ -122,6 +122,16 @@ function TakeExamInner() {
               </div>
             )}
             <MathRenderer className="question-text" content={q.questionText as string} style={{ marginBottom: 12, fontWeight: 500 }} />
+            {(q.questionImage as string) && (
+              <div style={{ textAlign: 'center', marginBottom: 14 }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={q.questionImage as string}
+                  alt="Hình ảnh câu hỏi"
+                  style={{ maxWidth: '100%', maxHeight: 280, borderRadius: 8, border: '1px solid #e2e8f0', objectFit: 'contain' }}
+                />
+              </div>
+            )}
             <Radio.Group value={answers[q.id as string]} onChange={e => onSelectOption(q.id as string, e.target.value)} style={{ width: '100%' }}>
               {['A', 'B', 'C', 'D'].map(opt => (
                 <div key={opt} style={{
