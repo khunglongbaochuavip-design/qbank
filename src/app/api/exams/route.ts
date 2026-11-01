@@ -74,6 +74,7 @@ export async function POST(request: Request) {
       // === AUTO SELECTION: stratified random from matrix criteria ===
       for (const item of matrix.items) {
         const where: Record<string, unknown> = { status: 'approved' };
+        if (matrix.subjectId) where.subjectId = matrix.subjectId;
         if (item.domainId) where.domainId = item.domainId;
         if (item.topicId) where.topicId = item.topicId;
         if (item.cognitiveLevelId) where.cognitiveLevelId = item.cognitiveLevelId;

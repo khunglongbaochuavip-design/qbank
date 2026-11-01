@@ -60,6 +60,20 @@ export default function ExamsPage() {
 
   // View questions modal (after exam created)
   const [viewExam, setViewExam] = useState<Record<string, unknown> | null>(null);
+  const [loadingView, setLoadingView] = useState(false);
+
+  const openViewExam = async (rec: Record<string, unknown>) => {
+    setViewExam(rec);
+    setLoadingView(true);
+    try {
+      const full = await api.get<Record<string, unknown>>(`/exams/${rec.id}`);
+      setViewExam(full);
+    } catch (err: unknown) {
+      message.error((err as Error).message || 'Không thể tải danh sách câu hỏi.');
+    } finally {
+      setLoadingView(false);
+    }
+  };
 
   const load = () => {
     setLoading(true);
@@ -170,7 +184,7 @@ export default function ExamsPage() {
     { title: 'Thao tác', width: 230,
       render: (_: unknown, rec: Record<string, unknown>) => (
         <Space>
-          <Button size="small" icon={<EyeOutlined />} onClick={() => setViewExam(rec)}>Xem câu hỏi</Button>
+          <Button size="small" icon={<EyeOutlined />} onClick={() => openViewExam(rec)}>Xem câu hỏi</Button>
           {rec.status === 'draft' && (
             <Popconfirm title="Chốt đề? Sau khi chốt không thể sửa." onConfirm={() => onFinalize(rec.id as string)}>
               <Button size="small" type="primary" icon={<CheckCircleOutlined />}>Chốt</Button>
@@ -359,6 +373,9 @@ export default function ExamsPage() {
         styles={{ body: { maxHeight: '70vh', overflowY: 'auto' } }}
       >
         {viewExam && (() => {
+          if (loadingView) {
+            return <div style={{ textAlign: 'center', padding: 40 }}><Spin size="large" tip="Đang tải câu hỏi..." /></div>;
+          }
           const eqs = (viewExam.examQuestions as Record<string, unknown>[]) || [];
           return eqs.length === 0 ? (
             <Alert type="warning" message="Đề thi này chưa có câu hỏi nào." showIcon />

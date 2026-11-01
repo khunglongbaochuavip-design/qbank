@@ -1,4 +1,4 @@
-import { requireAuth, success, badRequest, forbidden, notFound, logAction, getClientIP } from '@/lib/api-utils';
+import { requireMinRole, success, badRequest, forbidden, notFound, logAction, getClientIP } from '@/lib/api-utils';
 import prisma from '@/lib/prisma';
 import { NextResponse } from 'next/server';
 
@@ -12,7 +12,7 @@ const questionInclude = {
 
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const user = await requireAuth(request);
+    const user = await requireMinRole(request, 'teacher');
     if (user instanceof NextResponse) return user;
     const { id } = await params;
 
@@ -35,7 +35,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const user = await requireAuth(request);
+    const user = await requireMinRole(request, 'teacher');
     if (user instanceof NextResponse) return user;
     const { id } = await params;
 
@@ -102,7 +102,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const user = await requireAuth(request);
+    const user = await requireMinRole(request, 'teacher');
     if (user instanceof NextResponse) return user;
     const { id } = await params;
 
@@ -111,6 +111,11 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
 
     if (user.role === 'teacher' && existing.createdById !== user.id) {
       return forbidden('Bạn không có quyền xóa câu hỏi này.');
+    }
+
+    const usedInAttempts = await prisma.examAttemptQuestion.count({ where: { questionId: id } });
+    if (usedInAttempts > 0) {
+      return badRequest('Không thể xóa câu hỏi đã được sử dụng trong bài thi của thí sinh.');
     }
 
     // Hard delete: clean up dependent records before removing question

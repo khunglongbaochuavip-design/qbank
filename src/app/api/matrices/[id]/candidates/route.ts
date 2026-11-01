@@ -31,6 +31,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     // For each matrix item, find all approved matching questions
     const groups = await Promise.all(matrix.items.map(async (item) => {
       const where: Record<string, unknown> = { status: 'approved' };
+      if (matrix.subjectId) where.subjectId = matrix.subjectId;
       if (item.domainId) where.domainId = item.domainId;
       if (item.topicId) where.topicId = item.topicId;
       if (item.cognitiveLevelId) where.cognitiveLevelId = item.cognitiveLevelId;

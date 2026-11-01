@@ -1,4 +1,4 @@
-import { requireAuth } from '@/lib/api-utils';
+import { requireMinRole } from '@/lib/api-utils';
 import { NextResponse } from 'next/server';
 import ExcelJS from 'exceljs';
 import prisma from '@/lib/prisma';
@@ -6,7 +6,7 @@ import { QUESTION_STATUS_LABELS } from '@/lib/constants';
 
 export async function GET(request: Request) {
   try {
-    const user = await requireAuth(request);
+    const user = await requireMinRole(request, 'teacher');
     if (user instanceof NextResponse) return user;
 
     const url = new URL(request.url);

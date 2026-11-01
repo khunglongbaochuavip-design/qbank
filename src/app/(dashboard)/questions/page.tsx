@@ -61,6 +61,12 @@ export default function QuestionsPage() {
   // resetFields=true khi người dùng chủ động đổi môn học (cần reset domain/topic đang chọn).
   // resetFields=false khi mở form sửa (chỉ load danh sách để dropdown có options, KHÔNG xóa giá trị cũ).
   const loadDomains = async (subjectId: string, resetFields = true) => {
+    if (!subjectId) {
+      setDomains([]);
+      setTopics([]);
+      if (resetFields) form.setFieldsValue({ domainId: null, topicId: null });
+      return;
+    }
     const d = await api.get<Record<string, unknown>[]>(`/domains?subjectId=${subjectId}`);
     setDomains(d);
     if (resetFields) {
@@ -73,6 +79,11 @@ export default function QuestionsPage() {
   // resetFields=true khi người dùng chủ động đổi lĩnh vực (cần reset topic đang chọn).
   // resetFields=false khi mở form sửa (chỉ load danh sách để dropdown có options, KHÔNG xóa giá trị cũ).
   const loadTopics = async (domainId: string, resetFields = true) => {
+    if (!domainId) {
+      setTopics([]);
+      if (resetFields) form.setFieldsValue({ topicId: null });
+      return;
+    }
     const t = await api.get<Record<string, unknown>[]>(`/topics?domainId=${domainId}`);
     setTopics(t);
     if (resetFields) {

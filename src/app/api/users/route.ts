@@ -58,11 +58,17 @@ export async function POST(request: Request) {
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) return badRequest('Email đã được sử dụng.');
 
+    const cleanStudentCode = String(studentCode || '').trim() || null;
+    if (cleanStudentCode) {
+      const existingCode = await prisma.user.findUnique({ where: { studentCode: cleanStudentCode } });
+      if (existingCode) return badRequest(`Mã học sinh "${cleanStudentCode}" đã được sử dụng.`);
+    }
+
     const passwordHash = await hashPassword(password);
     const userData: Record<string, unknown> = {
       email, passwordHash, fullName, role,
-      studentCode: studentCode || null,
-      className: className || null,
+      studentCode: cleanStudentCode,
+      className: String(className || '').trim() || null,
     };
 
     if (role === 'teacher' && Array.isArray(subjectIds) && subjectIds.length > 0) {

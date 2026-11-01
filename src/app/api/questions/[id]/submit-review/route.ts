@@ -1,10 +1,10 @@
-import { requireAuth, success, badRequest, forbidden, notFound, logAction, getClientIP } from '@/lib/api-utils';
+import { requireMinRole, success, badRequest, forbidden, notFound, logAction, getClientIP } from '@/lib/api-utils';
 import prisma from '@/lib/prisma';
 import { NextResponse } from 'next/server';
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const user = await requireAuth(request);
+    const user = await requireMinRole(request, 'teacher');
     if (user instanceof NextResponse) return user;
     const { id } = await params;
 

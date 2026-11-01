@@ -1,11 +1,11 @@
-import { requireAuth } from '@/lib/api-utils';
+import { requireMinRole } from '@/lib/api-utils';
 import { NextResponse } from 'next/server';
 import ExcelJS from 'exceljs';
 import prisma from '@/lib/prisma';
 
 export async function GET(request: Request) {
   try {
-    const user = await requireAuth(request);
+    const user = await requireMinRole(request, 'teacher');
     if (user instanceof NextResponse) return user;
 
     const wb = new ExcelJS.Workbook();

@@ -1,9 +1,8 @@
 'use client';
-import React, { useEffect, useState } from 'react';
-import { Table, Button, Tag, Space, message, Modal, Descriptions, Badge } from 'antd';
-import { CheckSquareOutlined, CheckOutlined, CloseOutlined, EyeOutlined } from '@ant-design/icons';
+import React, { useEffect, useRef, useState } from 'react';
+import { Table, Button, Tag, Space, message, Modal, Descriptions } from 'antd';
+import { CheckSquareOutlined, CheckOutlined, CloseOutlined, EyeOutlined, PictureOutlined, DeleteOutlined } from '@ant-design/icons';
 import { api } from '@/lib/api-client';
-import { QUESTION_STATUS_LABELS, QUESTION_STATUS_COLORS } from '@/lib/constants';
 import dynamic from 'next/dynamic';
 
 const MathRenderer = dynamic(() => import('@/components/MathRenderer'), { ssr: false });
@@ -12,6 +11,8 @@ export default function ReviewPage() {
   const [questions, setQuestions] = useState<Record<string, unknown>[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewItem, setViewItem] = useState<Record<string, unknown> | null>(null);
+  const [savingImage, setSavingImage] = useState(false);
+  const imgInputRef = useRef<HTMLInputElement>(null);
 
   const load = () => {
     setLoading(true);
@@ -30,6 +31,32 @@ export default function ReviewPage() {
   const onReject = async (id: string) => {
     try { await api.post(`/questions/${id}/reject`, { comment: 'Cần chỉnh sửa' }); message.success('Đã từ chối.'); load(); }
     catch (err: unknown) { message.error((err as Error).message); }
+  };
+
+  const updateQuestionImage = async (newImage: string | null) => {
+    if (!viewItem) return;
+    setSavingImage(true);
+    try {
+      await api.patch(`/questions/${viewItem.id}`, { questionImage: newImage });
+      setViewItem(prev => prev ? { ...prev, questionImage: newImage } : null);
+      setQuestions(prev => prev.map(q => q.id === viewItem.id ? { ...q, questionImage: newImage } : q));
+      message.success(newImage ? 'Đã lưu ảnh câu hỏi.' : 'Đã xóa ảnh câu hỏi.');
+    } catch (err: unknown) {
+      message.error((err as Error).message || 'Không thể lưu ảnh.');
+    } finally {
+      setSavingImage(false);
+    }
+  };
+
+  const onSelectImageFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { message.error('Chỉ chấp nhận file ảnh (PNG, JPG, GIF...).'); return; }
+    if (file.size > 2 * 1024 * 1024) { message.error('Ảnh tối đa 2MB.'); return; }
+    const reader = new FileReader();
+    reader.onload = () => updateQuestionImage(reader.result as string);
+    reader.readAsDataURL(file);
   };
 
   const columns = [
@@ -99,16 +126,32 @@ export default function ReviewPage() {
               <MathRenderer content={viewItem.questionText as string} />
             </div>
 
-            {(viewItem.questionImage as string) && (
-              <div style={{ textAlign: 'center', marginBottom: 14 }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={viewItem.questionImage as string}
-                  alt="Hình ảnh câu hỏi"
-                  style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 8, border: '1px solid #e2e8f0', objectFit: 'contain' }}
-                />
+            <div style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 8, padding: '10px 14px', marginBottom: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: (viewItem.questionImage as string) ? 10 : 0 }}>
+                <strong style={{ fontSize: 13 }}>Hình ảnh minh họa:</strong>
+                <Space>
+                  <input ref={imgInputRef} type="file" accept="image/*" style={{ display: 'none' }} onChange={onSelectImageFile} />
+                  <Button size="small" icon={<PictureOutlined />} loading={savingImage} onClick={() => imgInputRef.current?.click()}>
+                    {(viewItem.questionImage as string) ? 'Đổi ảnh' : 'Thêm ảnh'}
+                  </Button>
+                  {(viewItem.questionImage as string) && (
+                    <Button size="small" danger icon={<DeleteOutlined />} loading={savingImage} onClick={() => updateQuestionImage(null)}>
+                      Xóa ảnh
+                    </Button>
+                  )}
+                </Space>
               </div>
-            )}
+              {(viewItem.questionImage as string) && (
+                <div style={{ textAlign: 'center' }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={viewItem.questionImage as string}
+                    alt="Hình ảnh câu hỏi"
+                    style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 8, border: '1px solid #e2e8f0', objectFit: 'contain' }}
+                  />
+                </div>
+              )}
+            </div>
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 14 }}>
               {(['A', 'B', 'C', 'D'] as const).map(opt => (

@@ -30,15 +30,28 @@ export async function POST(request: Request) {
     const rows: RowData[] = [];
     const parseErrors: string[] = [];
 
+    const cellText = (v: unknown): string => {
+      if (v === null || v === undefined) return '';
+      if (typeof v === 'object') {
+        if ('text' in v && (v as { text?: unknown }).text !== undefined) {
+          return String((v as { text: unknown }).text ?? '').trim();
+        }
+        if ('result' in v && (v as { result?: unknown }).result !== undefined) {
+          return String((v as { result: unknown }).result ?? '').trim();
+        }
+      }
+      return String(v).trim();
+    };
+
     ws.eachRow((row, rowNum) => {
       if (rowNum === 1) return; // skip header
-      const cells = row.values as (string | null | undefined)[];
+      const cells = row.values as unknown[];
       // ExcelJS row.values is 1-indexed: [undefined, col1, col2, ...]
-      const fullName = String(cells[2] || '').trim();
-      const email = String(cells[3] || '').trim().toLowerCase();
-      const password = String(cells[4] || '').trim();
-      const studentCode = String(cells[5] || '').trim() || undefined;
-      const className = String(cells[6] || '').trim() || undefined;
+      const fullName = cellText(cells[2]);
+      const email = cellText(cells[3]).toLowerCase();
+      const password = cellText(cells[4]);
+      const studentCode = cellText(cells[5]) || undefined;
+      const className = cellText(cells[6]) || undefined;
 
       if (!fullName && !email && !password) return; // blank row
       if (!fullName) { parseErrors.push(`Dòng ${rowNum}: Thiếu họ tên.`); return; }

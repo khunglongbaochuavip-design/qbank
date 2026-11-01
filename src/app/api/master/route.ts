@@ -142,6 +142,7 @@ export async function DELETE(request: Request) {
         return success({ message: 'Đã xóa thành công.' });
       }
       case 'difficulty-levels': {
+        await prisma.question.updateMany({ where: { difficultyLevelId: id }, data: { difficultyLevelId: null } });
         await prisma.examBlueprintItem.deleteMany({ where: { difficultyLevelId: id } });
         await prisma.difficultyLevel.delete({ where: { id } });
         return success({ message: 'Đã xóa thành công.' });

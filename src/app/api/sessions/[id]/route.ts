@@ -22,6 +22,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
     if (user.role === 'student') {
       const assigned = session.participants.some(p => p.studentId === user.id);
       if (!assigned) return forbidden('Bạn không được phân công vào phiên thi này.');
+      return success({
+        ...session,
+        participants: session.participants.filter(p => p.studentId === user.id),
+        attempts: session.attempts.filter(a => a.studentId === user.id),
+      });
     }
 
     return success(session);
