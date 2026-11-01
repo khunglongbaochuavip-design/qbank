@@ -15,17 +15,22 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
           rel="stylesheet"
         />
-        {/* MathJax 3 — render MathML 3.0 (no namespace) throughout the app */}
+        {/* MathJax 3 — render both LaTeX ($...$, $$...$$, \(...\), \[...\]) and MathML 3.0 (<math>...</math>) */}
         <script
           dangerouslySetInnerHTML={{
             __html: `window.MathJax = {
+  tex: {
+    inlineMath: [['$', '$'], ['\\\\(', '\\\\)']],
+    displayMath: [['$$', '$$'], ['\\\\[', '\\\\]']],
+    processEscapes: true
+  },
   options: { skipHtmlTags: ['script','noscript','style','textarea','pre','code'] },
   startup: { typeset: false }
 };`
           }}
         />
         <script
-          src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/mml-chtml.js"
+          src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"
           async
         />
       </head>

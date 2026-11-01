@@ -339,13 +339,8 @@ export default function ExamsPage() {
                                   {q.difficultyLevel?.name || `Độ khó ${q.estimatedDifficulty}`}
                                 </Tag>
                               </div>
-                              <div style={{ marginTop: 4, color: '#1e293b', lineHeight: 1.5 }}>
-                                <MathRenderer content={
-                                  (() => {
-                                    const t = q.questionText?.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim() || '';
-                                    return t.length > 120 ? t.slice(0, 120) + '…' : t;
-                                  })()
-                                } />
+                              <div style={{ marginTop: 4, color: '#1e293b', lineHeight: 1.5, maxHeight: 72, overflow: 'hidden' }}>
+                                <MathRenderer content={q.questionText || ''} />
                               </div>
                             </div>
                             <Tooltip title={`Đáp án: ${q.correctOption}`}>
@@ -385,7 +380,6 @@ export default function ExamsPage() {
                 message={`Đề có ${eqs.length} câu hỏi. Thứ tự hiển thị theo số thứ tự trong đề.`} />
               {eqs.map((eq) => {
                 const q = eq.question as Record<string, unknown>;
-                const text = (q?.questionText as string || '').replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
                 return (
                   <div key={eq.id as string} style={{ padding: '10px 14px', borderBottom: '1px solid #f1f5f9' }}>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
@@ -394,7 +388,7 @@ export default function ExamsPage() {
                         <span style={{ fontSize: 11, color: '#64748b', marginRight: 8 }}>
                           {(q?.questionCode as string) || ''}
                         </span>
-                        <MathRenderer content={text.length > 150 ? text.slice(0, 150) + '…' : text} />
+                        <MathRenderer content={(q?.questionText as string) || ''} />
                       </div>
                       <Tag color="green" style={{ flexShrink: 0 }}>{q?.correctOption as string}</Tag>
                     </div>

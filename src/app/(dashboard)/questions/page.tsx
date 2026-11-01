@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 
 const MathEditor = dynamic(() => import('@/components/MathEditor'), { ssr: false });
+const MathRenderer = dynamic(() => import('@/components/MathRenderer'), { ssr: false });
 
 export default function QuestionsPage() {
   const { user } = useAuth();
@@ -141,10 +142,9 @@ export default function QuestionsPage() {
   const columns = [
     { title: 'Mã', dataIndex: 'questionCode', width: 120 },
     { title: 'Nội dung', dataIndex: 'questionText', ellipsis: true,
-      render: (t: string) => {
-        const cleanText = t ? t.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim() : '';
-        return <span style={{ fontWeight: 500 }}>{cleanText.substring(0, 60)}{cleanText.length > 60 ? '...' : ''}</span>;
-      }
+      render: (t: string) => (
+        <MathRenderer content={t || ''} style={{ fontWeight: 500, maxHeight: 48, overflow: 'hidden' }} />
+      )
     },
     { title: 'Môn', dataIndex: ['subject', 'name'], width: 100 },
     { title: 'Chủ đề', dataIndex: ['topic', 'name'], width: 120 },

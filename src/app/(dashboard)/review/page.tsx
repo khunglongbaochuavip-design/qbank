@@ -62,10 +62,9 @@ export default function ReviewPage() {
   const columns = [
     { title: 'Mã', dataIndex: 'questionCode', width: 110 },
     { title: 'Nội dung', dataIndex: 'questionText', ellipsis: true,
-      render: (t: string) => {
-        const cleanText = t ? t.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim() : '';
-        return <span>{cleanText}</span>;
-      }
+      render: (t: string) => (
+        <MathRenderer content={t || ''} style={{ maxHeight: 48, overflow: 'hidden' }} />
+      )
     },
     { title: 'Môn', dataIndex: ['subject', 'name'], width: 100 },
     { title: 'Người tạo', dataIndex: ['createdBy', 'fullName'], width: 140 },
