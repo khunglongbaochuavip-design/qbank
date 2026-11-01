@@ -496,6 +496,7 @@ model ExamAnswer {
   originalOption String?  // Mapped back to original bank order
   isCorrect      Boolean  @default(false)
   answeredAt     DateTime @default(now())
+  clientTs       Float?   // Client click timestamp (ms) — newer selection always wins, prevents out-of-order overwrite
 
   attempt         ExamAttempt         @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   attemptQuestion ExamAttemptQuestion @relation(fields: [attemptQuestionId], references: [id], onDelete: Cascade)

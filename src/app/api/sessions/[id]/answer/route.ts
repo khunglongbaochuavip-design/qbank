@@ -1,6 +1,7 @@
 import { requireAuth, success, badRequest, forbidden } from '@/lib/api-utils';
 import prisma from '@/lib/prisma';
 import { NextResponse } from 'next/server';
+import { saveAnswerRecord } from '@/lib/exam-answer';
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -9,7 +10,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     if (user.role !== 'student') return forbidden('Chỉ dành cho học sinh.');
 
     const { id: sessionId } = await params;
-    const { questionId, selectedOption } = await request.json();
+    const { questionId, selectedOption, clientTs } = await request.json();
+    if (!questionId) return badRequest('Thiếu mã câu hỏi.');
 
     const attempt = await prisma.examAttempt.findUnique({
       where: { sessionId_studentId: { sessionId, studentId: user.id } },
@@ -26,33 +28,19 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       }
     }
 
-    // Find the attempt question to get option mapping
-    const aq = await prisma.examAttemptQuestion.findUnique({
-      where: { attemptId_questionId: { attemptId: attempt.id, questionId } },
-    });
-    if (!aq) return badRequest('Câu hỏi không hợp lệ.');
-
-    const optionMap = JSON.parse(aq.optionMap); // displayed -> original
-    const snapshot = JSON.parse(aq.snapshotContent);
-
-    // Map selected option back to original
-    const originalOption = selectedOption ? optionMap[selectedOption] : null;
-    const isCorrect = originalOption === snapshot.correctOption;
-
-    await prisma.examAnswer.upsert({
-      where: { attemptId_questionId: { attemptId: attempt.id, questionId } },
-      update: { selectedOption, originalOption, isCorrect, answeredAt: new Date() },
-      create: {
-        attemptId: attempt.id, attemptQuestionId: aq.id, questionId,
-        selectedOption, originalOption, isCorrect,
-      },
-    });
+    // Map displayed option -> original option, grade against snapshot, newer click wins
+    const result = await saveAnswerRecord(
+      attempt.id, questionId,
+      selectedOption ?? null,
+      typeof clientTs === 'number' ? clientTs : null,
+    );
+    if (!result.ok) return badRequest(result.error);
 
     await prisma.examAttempt.update({
       where: { id: attempt.id }, data: { lastSavedAt: new Date() },
     });
 
-    return success({ saved: true });
+    return success({ saved: true, applied: result.applied });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: 'Lỗi hệ thống.' }, { status: 500 });

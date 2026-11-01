@@ -39,10 +39,21 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const { name, startTime, endTime, durationMinutes, status, studentIds } = await request.json();
 
     if (studentIds !== undefined) {
-      await prisma.examParticipant.deleteMany({ where: { sessionId: id } });
-      if (studentIds.length > 0) {
+      // Preserve students who already started an attempt (e.g. joined via access code)
+      const attempted = await prisma.examAttempt.findMany({
+        where: { sessionId: id },
+        select: { studentId: true },
+      });
+      const keepIds = new Set<string>([
+        ...(Array.isArray(studentIds) ? studentIds : []),
+        ...attempted.map(a => a.studentId),
+      ]);
+      await prisma.examParticipant.deleteMany({
+        where: { sessionId: id, studentId: { notIn: Array.from(keepIds) } },
+      });
+      if (keepIds.size > 0) {
         await prisma.examParticipant.createMany({
-          data: studentIds.map((sid: string) => ({ sessionId: id, studentId: sid })),
+          data: Array.from(keepIds).map((sid: string) => ({ sessionId: id, studentId: sid })),
           skipDuplicates: true,
         });
       }

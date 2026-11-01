@@ -52,6 +52,23 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const body = await request.json();
     const { tagIds, ...rest } = body;
 
+    // Prevent changing answer key / options if question is already part of a finalized exam
+    const isChangingKeyOrOptions =
+      (rest.correctOption !== undefined && rest.correctOption !== existing.correctOption) ||
+      (rest.optionA !== undefined && rest.optionA !== existing.optionA) ||
+      (rest.optionB !== undefined && rest.optionB !== existing.optionB) ||
+      (rest.optionC !== undefined && rest.optionC !== existing.optionC) ||
+      (rest.optionD !== undefined && rest.optionD !== existing.optionD);
+
+    if (isChangingKeyOrOptions) {
+      const inFinalizedExam = await prisma.examQuestion.count({
+        where: { questionId: id, exam: { status: 'finalized' } },
+      });
+      if (inFinalizedExam > 0) {
+        return badRequest('Câu hỏi này đã nằm trong đề thi đã chốt nên không thể thay đổi phương án A/B/C/D hoặc đáp án đúng. Hãy tạo câu hỏi mới nếu cần phiên bản khác.');
+      }
+    }
+
     if (tagIds !== undefined) {
       await prisma.questionTag.deleteMany({ where: { questionId: id } });
       if (tagIds.length > 0) {

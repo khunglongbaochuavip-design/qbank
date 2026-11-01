@@ -61,6 +61,11 @@ export async function DELETE(request: Request, { params }: { params: Promise<{ i
     const activeSessions = await prisma.examSession.findMany({ where: { examId: id, status: 'active' } });
     if (activeSessions.length > 0) return badRequest('Không thể xóa đề thi khi đang có phiên thi diễn ra.');
 
+    const attemptCount = await prisma.examAttempt.count({ where: { session: { examId: id } } });
+    if (attemptCount > 0) {
+      return badRequest(`Không thể xóa đề thi vì đã có ${attemptCount} bài làm của thí sinh thuộc đề này. Hãy xóa phiên thi trước nếu thật sự muốn xóa kết quả.`);
+    }
+
     const sessions = await prisma.examSession.findMany({ where: { examId: id }, select: { id: true } });
     const sessionIds = sessions.map(s => s.id);
     if (sessionIds.length > 0) {

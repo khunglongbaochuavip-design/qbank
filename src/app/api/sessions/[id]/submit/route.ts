@@ -1,6 +1,10 @@
 import { requireAuth, success, badRequest, notFound, forbidden, logAction, getClientIP } from '@/lib/api-utils';
 import prisma from '@/lib/prisma';
 import { NextResponse } from 'next/server';
+import { saveAnswerRecord, gradeAttempt } from '@/lib/exam-answer';
+
+// Extra seconds after the timer reaches 0 during which final answers sent with the submit are still accepted
+const SUBMIT_GRACE_SECONDS = 60;
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -13,7 +17,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const attempt = await prisma.examAttempt.findUnique({
       where: { sessionId_studentId: { sessionId, studentId: user.id } },
-      include: { answers: true },
+      include: { session: { select: { durationMinutes: true } } },
     });
 
     if (!attempt) return notFound('Bài thi không tồn tại.');
@@ -21,27 +25,44 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return badRequest('Bài thi đã được nộp.');
     }
 
-    // Grade the attempt
-    const totalQuestions = await prisma.examAttemptQuestion.count({ where: { attemptId: attempt.id } });
-    const correct = attempt.answers.filter(a => a.isCorrect).length;
-    const wrong = totalQuestions - correct;
-    const score = totalQuestions > 0 ? parseFloat(((correct / totalQuestions) * 10).toFixed(2)) : 0;
+    // Final sync: the browser sends ALL its current answers with the submit, so an answer
+    // whose individual save was still in flight (or failed) is not lost. Newer-click-wins still applies.
+    const durationSeconds = (attempt.session.durationMinutes || 60) * 60;
+    const elapsedSeconds = Math.floor((Date.now() - new Date(attempt.startedAt).getTime()) / 1000);
+    const withinTime = elapsedSeconds <= durationSeconds + SUBMIT_GRACE_SECONDS;
 
+    if (withinTime && Array.isArray(body.answers)) {
+      for (const a of body.answers as { questionId?: string; selectedOption?: string | null; clientTs?: number }[]) {
+        if (!a || typeof a.questionId !== 'string') continue;
+        await saveAnswerRecord(
+          attempt.id, a.questionId,
+          a.selectedOption ?? null,
+          typeof a.clientTs === 'number' ? a.clientTs : null,
+        );
+      }
+    }
+
+    // Grade the attempt (total = all questions of the attempt)
+    const { numCorrect, numWrong, score } = await gradeAttempt(attempt.id);
     const submittedStatus = body.autoSubmit ? 'auto_submitted' : 'submitted';
 
-    const updated = await prisma.examAttempt.update({
-      where: { id: attempt.id },
+    // Only transition if still in progress (guards against double submit / session end race)
+    const res = await prisma.examAttempt.updateMany({
+      where: { id: attempt.id, status: 'in_progress' },
       data: {
         status: submittedStatus as 'submitted' | 'auto_submitted',
         submittedAt: new Date(),
-        numCorrect: correct, numWrong: wrong, score,
+        numCorrect, numWrong, score,
       },
     });
+    if (res.count === 0) return badRequest('Bài thi đã được nộp.');
+
+    const updated = await prisma.examAttempt.findUnique({ where: { id: attempt.id } });
 
     await logAction({
       userId: user.id, action: submittedStatus === 'auto_submitted' ? 'AUTO_SUBMIT' : 'SUBMIT_EXAM',
       module: 'ATTEMPT', targetId: attempt.id,
-      details: { score, numCorrect: correct },
+      details: { score, numCorrect },
       ipAddress: getClientIP(request),
     });
 

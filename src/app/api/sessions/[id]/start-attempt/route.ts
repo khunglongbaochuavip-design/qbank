@@ -34,21 +34,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     });
     if (!assigned) return forbidden('Bạn không được phân công vào phiên thi này. Hãy dùng mã tham gia trên trang "Bài thi của tôi".');
 
-    // Check existing attempt
-    let attempt = await prisma.examAttempt.findUnique({
-      where: { sessionId_studentId: { sessionId, studentId: user.id } },
-      include: {
-        questions: { orderBy: { displayOrder: 'asc' } },
-        answers: true,
-      },
-    });
+    // Helper to return existing attempt snapshot
+    const buildAttemptResponse = async (attempt: {
+      id: string;
+      startedAt: Date;
+      status: string;
+      questions: { id: string; questionId: string; displayOrder: number; snapshotContent: string; optionMap: string }[];
+      answers: { questionId: string; selectedOption: string | null; isCorrect: boolean }[];
+    }, isReconnect: boolean) => {
+      if (attempt.status !== 'in_progress') {
+        return badRequest('Bạn đã nộp bài thi này.');
+      }
 
-    if (attempt && attempt.status !== 'in_progress') {
-      return badRequest('Bạn đã nộp bài thi này.');
-    }
-
-    // If attempt exists, return saved snapshot
-    if (attempt) {
       const durationSeconds = (session.durationMinutes || 60) * 60;
       const elapsedSeconds = Math.floor((Date.now() - new Date(attempt.startedAt).getTime()) / 1000);
       const remainingSeconds = Math.max(0, durationSeconds - elapsedSeconds);
@@ -69,11 +66,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         return badRequest('Đã hết thời gian làm bài.');
       }
 
-      // Return existing snapshot (no correct answers)
       const questions = attempt.questions.map(aq => {
         const snapshot = JSON.parse(aq.snapshotContent);
         const optionMap = JSON.parse(aq.optionMap);
-        const answer = attempt!.answers.find(a => a.questionId === aq.questionId);
+        const answer = attempt.answers.find(a => a.questionId === aq.questionId);
         return {
           id: aq.questionId,
           attemptQuestionId: aq.id,
@@ -89,44 +85,46 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         };
       });
 
-      await logAction({ userId: user.id, action: 'RECONNECT_EXAM', module: 'ATTEMPT', targetId: attempt.id, ipAddress: getClientIP(request) });
+      await logAction({
+        userId: user.id,
+        action: isReconnect ? 'RECONNECT_EXAM' : 'START_EXAM',
+        module: 'ATTEMPT',
+        targetId: attempt.id,
+        ipAddress: getClientIP(request),
+      });
 
       return success({
         attempt: { id: attempt.id, startedAt: attempt.startedAt, authoritativeRemainingSeconds: remainingSeconds },
         session: { id: session.id, name: session.name, durationMinutes: session.durationMinutes },
         questions,
       });
-    }
+    };
 
-    // ─── CREATE NEW ATTEMPT WITH SNAPSHOT ───────────────────────────
-
-    const seed = crypto.createHash('sha256').update(`${user.id}-${session.examId}-${Date.now()}`).digest('hex');
-
-    attempt = await prisma.examAttempt.create({
-      data: { sessionId, studentId: user.id, status: 'in_progress', seed },
-      include: { questions: true, answers: true },
+    // Check existing attempt
+    const existingAttempt = await prisma.examAttempt.findUnique({
+      where: { sessionId_studentId: { sessionId, studentId: user.id } },
+      include: {
+        questions: { orderBy: { displayOrder: 'asc' } },
+        answers: true,
+      },
     });
 
-    // Shuffle questions deterministically using seed
+    if (existingAttempt && existingAttempt.questions.length > 0) {
+      return buildAttemptResponse(existingAttempt, true);
+    }
+
+    // ─── CREATE NEW ATTEMPT WITH SNAPSHOT IN ATOMIC TRANSACTION ───────────────────────────
+    const seed = crypto.createHash('sha256').update(`${user.id}-${session.examId}-${Date.now()}`).digest('hex');
     const examQuestions = [...session.exam.examQuestions];
     const seededRandom = seedRandom(seed);
     shuffleArray(examQuestions, seededRandom);
 
-    // Create snapshot for each question — build all data first, then bulk insert
-    const snapshotData: { attemptId: string; questionId: string; displayOrder: number; snapshotContent: string; optionMap: string }[] = [];
-    const snapshotMeta: { idx: number; q: typeof examQuestions[0]['question']; optionMap: Record<string, string> }[] = [];
-
-    for (let i = 0; i < examQuestions.length; i++) {
-      const eq = examQuestions[i];
+    const preparedQuestions = examQuestions.map((eq, i) => {
       const q = eq.question;
-
-      // Shuffle options
       const optionKeys = ['A', 'B', 'C', 'D'];
       const shuffledKeys = [...optionKeys];
       shuffleArray(shuffledKeys, seededRandom);
 
-      // optionMap: displayed position -> original position
-      // e.g., { A: "C", B: "A", C: "D", D: "B" } means displayed A shows original C
       const optionMap: Record<string, string> = {};
       for (let j = 0; j < 4; j++) {
         optionMap[optionKeys[j]] = shuffledKeys[j];
@@ -144,54 +142,54 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         explanation: q.explanation,
       };
 
-      snapshotData.push({
-        attemptId: attempt.id,
+      return {
         questionId: q.id,
         displayOrder: i + 1,
         snapshotContent: JSON.stringify(snapshot),
         optionMap: JSON.stringify(optionMap),
-      });
-      snapshotMeta.push({ idx: i, q, optionMap });
-    }
-
-    // Bulk insert all attempt questions in a single query (eliminates N+1)
-    await prisma.examAttemptQuestion.createMany({ data: snapshotData });
-
-    // Fetch back the created IDs in display order
-    const createdAQs = await prisma.examAttemptQuestion.findMany({
-      where: { attemptId: attempt.id },
-      orderBy: { displayOrder: 'asc' },
-      select: { id: true, displayOrder: true, questionId: true },
-    });
-    const aqMap = new Map(createdAQs.map(aq => [aq.questionId, aq]));
-
-    const snapshotQuestions = snapshotMeta.map(({ idx, q, optionMap }) => {
-      const aq = aqMap.get(q.id)!;
-      const snapshotContent = JSON.parse(snapshotData[idx].snapshotContent);
-      return {
-        id: q.id,
-        attemptQuestionId: aq.id,
-        displayOrder: idx + 1,
-        questionText: q.questionText,
-        contextText: q.contextText,
-        questionImage: q.questionImage,
-        optionA: snapshotContent[`option${optionMap.A}`],
-        optionB: snapshotContent[`option${optionMap.B}`],
-        optionC: snapshotContent[`option${optionMap.C}`],
-        optionD: snapshotContent[`option${optionMap.D}`],
-        selectedOption: null,
       };
     });
 
-    const durationSeconds = (session.durationMinutes || 60) * 60;
+    try {
+      const createdAttempt = await prisma.$transaction(async (tx) => {
+        // If an incomplete attempt with 0 questions existed from a prior failed run, populate it
+        const att = existingAttempt
+          ? existingAttempt
+          : await tx.examAttempt.create({
+              data: { sessionId, studentId: user.id, status: 'in_progress', seed },
+            });
 
-    await logAction({ userId: user.id, action: 'START_EXAM', module: 'ATTEMPT', targetId: attempt.id, ipAddress: getClientIP(request) });
+        if (preparedQuestions.length > 0) {
+          await tx.examAttemptQuestion.createMany({
+            data: preparedQuestions.map(pq => ({ ...pq, attemptId: att.id })),
+            skipDuplicates: true,
+          });
+        }
 
-    return success({
-      attempt: { id: attempt.id, startedAt: attempt.startedAt, authoritativeRemainingSeconds: durationSeconds },
-      session: { id: session.id, name: session.name, durationMinutes: session.durationMinutes },
-      questions: snapshotQuestions,
-    });
+        return tx.examAttempt.findUniqueOrThrow({
+          where: { id: att.id },
+          include: {
+            questions: { orderBy: { displayOrder: 'asc' } },
+            answers: true,
+          },
+        });
+      });
+
+      return buildAttemptResponse(createdAttempt, false);
+    } catch (txErr) {
+      // Handle race condition: double-click or two tabs opening simultaneously
+      const racedAttempt = await prisma.examAttempt.findUnique({
+        where: { sessionId_studentId: { sessionId, studentId: user.id } },
+        include: {
+          questions: { orderBy: { displayOrder: 'asc' } },
+          answers: true,
+        },
+      });
+      if (racedAttempt && racedAttempt.questions.length > 0) {
+        return buildAttemptResponse(racedAttempt, true);
+      }
+      throw txErr;
+    }
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: 'Lỗi hệ thống.' }, { status: 500 });

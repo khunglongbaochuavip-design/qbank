@@ -117,7 +117,9 @@ export async function POST(request: Request) {
       let examCode = `DE-${String(count + variant).padStart(4, '0')}-${Date.now().toString().slice(-6)}`;
       if (numberOfVariants > 1) examCode += `-V${variant}`;
 
-      const variantQuestions = [...selectedQuestions].sort(() => Math.random() - 0.5);
+      const variantQuestions = numberOfVariants > 1
+        ? [...selectedQuestions].sort(() => Math.random() - 0.5)
+        : [...selectedQuestions];
 
       const exam = await prisma.exam.create({
         data: {

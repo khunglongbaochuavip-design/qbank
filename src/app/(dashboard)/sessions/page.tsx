@@ -45,7 +45,13 @@ export default function SessionsPage() {
     try { await api.del(`/sessions/${id}`); message.success('Đã xóa phiên thi.'); load(); }
     catch (err: unknown) { message.error((err as Error).message); }
   };
-  const onExport = (id: string) => { api.download(`/results/export?sessionId=${id}`, `results_${id}.xlsx`); };
+  const onExport = (rec: Record<string, unknown>) => {
+    const slug = String(rec.name || 'phien_thi').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd').replace(/Đ/g, 'D').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'phien_thi';
+    const date = new Date().toISOString().slice(0, 10);
+    api.download(`/results/export?sessionId=${rec.id}`, `KetQua_${slug}_${date}.xlsx`)
+      .catch(() => message.error('Xuất Excel thất bại.'));
+  };
 
   const copyCode = (code: string) => {
     navigator.clipboard.writeText(code);
@@ -80,9 +86,23 @@ export default function SessionsPage() {
       render: (_: unknown, rec: Record<string, unknown>) => (
         <Space>
           {rec.status === 'scheduled' && <Button size="small" type="primary" icon={<PlayCircleOutlined />} onClick={() => onStart(rec.id as string)}>Bắt đầu</Button>}
-          {rec.status === 'active' && <Button size="small" danger icon={<StopOutlined />} onClick={() => onEnd(rec.id as string)}>Kết thúc</Button>}
-          {rec.status === 'ended' && <Button size="small" icon={<DownloadOutlined />} onClick={() => onExport(rec.id as string)}>Xuất Excel</Button>}
-          <Popconfirm title="Xóa phiên thi này hoàn toàn?" onConfirm={() => onDelete(rec.id as string)}>
+          {rec.status === 'active' && (
+            <Popconfirm
+              title="Kết thúc phiên thi?"
+              description={<div style={{ maxWidth: 280 }}>Tất cả bài đang làm sẽ bị <b>thu và tự động nộp</b> ngay lập tức. Thao tác này không thể hoàn tác.</div>}
+              okText="Kết thúc" okButtonProps={{ danger: true }} cancelText="Hủy"
+              onConfirm={() => onEnd(rec.id as string)}>
+              <Button size="small" danger icon={<StopOutlined />}>Kết thúc</Button>
+            </Popconfirm>
+          )}
+          {rec.status === 'ended' && <Button size="small" icon={<DownloadOutlined />} onClick={() => onExport(rec)}>Xuất Excel</Button>}
+          <Popconfirm
+            title="Xóa phiên thi này hoàn toàn?"
+            description={((rec._count as { attempts?: number })?.attempts || 0) > 0
+              ? <div style={{ maxWidth: 280, color: '#dc2626' }}>Phiên này có <b>{(rec._count as { attempts: number }).attempts}</b> bài làm. Xóa phiên sẽ <b>xóa vĩnh viễn toàn bộ kết quả</b>. Hãy Xuất Excel trước nếu cần.</div>
+              : undefined}
+            okText="Xóa" okButtonProps={{ danger: true }} cancelText="Hủy"
+            onConfirm={() => onDelete(rec.id as string)}>
             <Button size="small" danger icon={<DeleteOutlined />} />
           </Popconfirm>
         </Space>
