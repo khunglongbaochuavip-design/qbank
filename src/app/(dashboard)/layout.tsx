@@ -1,6 +1,6 @@
 'use client';
-import React, { useState } from 'react';
-import { Layout, Menu, Avatar, Dropdown, ConfigProvider, Spin } from 'antd';
+import React, { useState, useEffect } from 'react';
+import { Layout, Menu, Avatar, Dropdown, ConfigProvider, Spin, Button } from 'antd';
 import { useRouter, usePathname } from 'next/navigation';
 import {
   DashboardOutlined, BookOutlined, CheckSquareOutlined, ImportOutlined,
@@ -18,6 +18,18 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      if (mobile) setCollapsed(true);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   if (loading) return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><Spin size="large" tip="Đang tải..." /></div>;
   if (!user) { router.push('/login'); return null; }
@@ -74,33 +86,80 @@ function DashboardLayoutInner({ children }: { children: React.ReactNode }) {
 
   return (
     <Layout className="app-layout">
-      <Sider className="app-sider" collapsible collapsed={collapsed} trigger={null} width={240} collapsedWidth={64}
-        style={{ position: 'sticky', top: 0, height: '100vh', overflow: 'auto' }}>
-        <div className="sidebar-logo" onClick={() => router.push('/dashboard')}>
+      {/* Mobile backdrop when sidebar drawer is open */}
+      {isMobile && !collapsed && (
+        <div
+          onClick={() => setCollapsed(true)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.5)', zIndex: 99 }}
+        />
+      )}
+      <Sider
+        className="app-sider"
+        collapsible
+        collapsed={collapsed}
+        trigger={null}
+        width={240}
+        collapsedWidth={isMobile ? 0 : 64}
+        style={
+          isMobile
+            ? { position: 'fixed', left: 0, top: 0, bottom: 0, height: '100vh', zIndex: 100, overflow: 'auto' }
+            : { position: 'sticky', top: 0, height: '100vh', overflow: 'auto' }
+        }
+      >
+        <div className="sidebar-logo" onClick={() => { router.push(user.role === 'student' ? '/my-exams' : '/dashboard'); if (isMobile) setCollapsed(true); }}>
           <div className="sidebar-logo-icon">📚</div>
           {!collapsed && <div><div className="sidebar-logo-text">QBank</div><div className="sidebar-logo-sub">Ngân hàng câu hỏi</div></div>}
         </div>
-        <Menu mode="inline" selectedKeys={[selectedKey]} items={navItems} onClick={({ key }) => router.push(key)}
-          style={{ flex: 1, overflowY: 'auto' }} />
-        {!collapsed && (
-          <div className="sidebar-footer"><strong>QBank Hữu Tài Genz</strong><br/>Bản quyền © 2026<br/>Liên hệ: Zalo 0902155906</div>
-        )}
+        <Menu
+          mode="inline"
+          selectedKeys={[selectedKey]}
+          items={navItems}
+          onClick={({ key }) => {
+            router.push(key);
+            if (isMobile) setCollapsed(true);
+          }}
+          style={{ flex: 1, overflowY: 'auto' }}
+        />
       </Sider>
-      <Layout>
+      <Layout style={{ minWidth: 0 }}>
         <Header className="app-header">
-          <div onClick={() => setCollapsed(!collapsed)} style={{ cursor: 'pointer', fontSize: 18, color: '#64748b' }}>
-            {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div onClick={() => setCollapsed(!collapsed)} style={{ cursor: 'pointer', fontSize: 18, color: '#64748b', padding: '4px 6px' }}>
+              {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+            </div>
+            {user.role === 'student' && (
+              <div style={{ display: 'flex', gap: 6 }}>
+                <Button
+                  size="small"
+                  type={pathname.startsWith('/my-exams') ? 'primary' : 'default'}
+                  icon={<PlayCircleOutlined />}
+                  onClick={() => router.push('/my-exams')}
+                >
+                  Bài thi
+                </Button>
+                <Button
+                  size="small"
+                  type={pathname.startsWith('/my-results') ? 'primary' : 'default'}
+                  icon={<BarChartOutlined />}
+                  onClick={() => router.push('/my-results')}
+                >
+                  Kết quả
+                </Button>
+              </div>
+            )}
           </div>
           <div className="header-right">
             <Dropdown menu={{ items: userMenuItems, onClick: handleUserMenu }} placement="bottomRight">
               <div className="header-user">
-                <Avatar size={34} style={{ background: ROLE_COLORS[user.role] || '#3b82f6', fontWeight: 700, fontSize: 15 }}>
+                <Avatar size={32} style={{ background: ROLE_COLORS[user.role] || '#3b82f6', fontWeight: 700, fontSize: 14, flexShrink: 0 }}>
                   {user.fullName?.charAt(0)}
                 </Avatar>
-                <div style={{ lineHeight: 1.3 }}>
-                  <div className="header-user-name">{user.fullName}</div>
-                  <div className="header-user-role">{ROLE_LABELS[user.role]}</div>
-                </div>
+                {!isMobile && (
+                  <div style={{ lineHeight: 1.3 }}>
+                    <div className="header-user-name">{user.fullName}</div>
+                    <div className="header-user-role">{ROLE_LABELS[user.role]}</div>
+                  </div>
+                )}
               </div>
             </Dropdown>
           </div>

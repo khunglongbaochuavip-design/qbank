@@ -26,6 +26,7 @@ function TakeExamInner() {
   const [submitted, setSubmitted] = useState(false);
   const [collected, setCollected] = useState(false); // session ended / attempt closed by the server
   const [submitting, setSubmitting] = useState(false);
+  const [navOpen, setNavOpen] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Latest choice per question with a strictly increasing click timestamp (newer always wins on the server)
@@ -195,12 +196,16 @@ function TakeExamInner() {
 
   const onSubmit = () => {
     const total = (data?.questions as unknown[])?.length || 0;
+    const answeredCount = Object.keys(answers).length;
+    const unanswered = total - answeredCount;
     const errCount = Object.values(saveState).filter(s => s === 'error').length;
     Modal.confirm({
+      centered: true,
       title: 'Xác nhận nộp bài?',
       content: (
         <div>
-          <div>Bạn đã trả lời {Object.keys(answers).length}/{total} câu hỏi.</div>
+          <div>Bạn đã trả lời <strong>{answeredCount}/{total}</strong> câu hỏi.</div>
+          {unanswered > 0 && <div style={{ color: '#d97706', marginTop: 4 }}>Còn {unanswered} câu chưa chọn đáp án.</div>}
           {errCount > 0 && <div style={{ color: '#dc2626', marginTop: 6 }}>Có {errCount} câu chưa lưu được — hệ thống sẽ gửi lại cùng lúc nộp bài.</div>}
         </div>
       ),
@@ -214,19 +219,19 @@ function TakeExamInner() {
 
   if (submitted) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', padding: 16 }}>
         <Result status="success" title="Đã nộp bài!" subTitle="Bài thi của bạn đã được ghi nhận."
-          extra={<Button type="primary" onClick={() => router.push('/my-results')}>Xem kết quả</Button>} />
+          extra={<Button type="primary" size="large" onClick={() => router.push('/my-results')}>Xem kết quả</Button>} />
       </div>
     );
   }
 
   if (collected) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', padding: 16 }}>
         <Result status="info" title="Bài thi đã được thu"
           subTitle="Phiên thi đã kết thúc hoặc bài làm đã được nộp. Các câu trả lời đã lưu trước đó vẫn được ghi nhận."
-          extra={<Button type="primary" onClick={() => router.push('/my-results')}>Xem kết quả</Button>} />
+          extra={<Button type="primary" size="large" onClick={() => router.push('/my-results')}>Xem kết quả</Button>} />
       </div>
     );
   }
@@ -238,24 +243,26 @@ function TakeExamInner() {
   const timerClass = remaining < 60 ? 'danger' : remaining < 300 ? 'warning' : '';
   const savingCount = Object.values(saveState).filter(s => s === 'saving').length;
   const errorCount = Object.values(saveState).filter(s => s === 'error').length;
+  const answeredCount = Object.keys(answers).length;
 
   return (
-    <div style={{ background: '#f1f5f9', minHeight: '100vh' }}>
+    <div style={{ background: '#f1f5f9', minHeight: '100vh', paddingBottom: 80 }}>
       <div className="exam-container">
+        {/* Sticky Top Exam Header */}
         <div className="exam-header">
-          <div>
-            <div style={{ fontSize: 18, fontWeight: 700 }}>{session?.name as string}</div>
-            <div style={{ fontSize: 13, opacity: 0.8 }}>Thời lượng: {session?.durationMinutes as number} phút · {questions.length} câu hỏi</div>
-            <div style={{ fontSize: 12, marginTop: 2 }}>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div className="exam-header-title">{session?.name as string}</div>
+            <div className="exam-header-meta">
+              Đã làm: <strong>{answeredCount}/{questions.length}</strong> câu ·{' '}
               {errorCount > 0 ? (
                 <span style={{ color: '#fecaca', fontWeight: 600 }}>
-                  ⚠ {errorCount} câu chưa lưu được{' '}
-                  <Button size="small" danger onClick={retryFailed} style={{ marginLeft: 6 }}>Lưu lại</Button>
+                  ⚠ {errorCount} câu lỗi{' '}
+                  <Button size="small" danger onClick={retryFailed} style={{ marginLeft: 4 }}>Lưu lại</Button>
                 </span>
               ) : savingCount > 0 ? (
-                <span style={{ opacity: 0.85 }}>Đang lưu…</span>
+                <span>Đang lưu…</span>
               ) : (
-                <span style={{ opacity: 0.85 }}>✓ Đã lưu tất cả câu trả lời</span>
+                <span>✓ Đã lưu</span>
               )}
             </div>
           </div>
@@ -264,64 +271,129 @@ function TakeExamInner() {
           </div>
         </div>
 
-        {questions.map((q) => (
-          <div key={q.id as string} className="question-card">
-            <div className="question-number">{q.displayOrder as number}</div>
-            {saveState[q.id as string] === 'error' && (
-              <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 6 }}>⚠ Câu này chưa lưu được lên máy chủ — hệ thống đang thử lại / sẽ gửi khi nộp bài.</div>
-            )}
-            {(q.contextText as string) && (
-              <div style={{ padding: 12, background: '#f8fafc', borderRadius: 8, marginBottom: 12, color: '#475569', fontSize: 13, fontStyle: 'italic' }}>
-                <MathRenderer content={q.contextText as string} />
+        {/* Question Cards */}
+        {questions.map((q) => {
+          const qId = q.id as string;
+          const selected = answers[qId];
+          return (
+            <div key={qId} className="question-card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <div className="question-number" style={{ marginBottom: 0 }}>Câu {q.displayOrder as number}</div>
+                {selected && <span style={{ fontSize: 12, color: '#2563eb', fontWeight: 600 }}>Đã chọn: {selected}</span>}
               </div>
-            )}
-            <MathRenderer className="question-text" content={q.questionText as string} style={{ marginBottom: 12, fontWeight: 500 }} />
-            {(q.questionImage as string) && (
-              <div style={{ textAlign: 'center', marginBottom: 14 }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={q.questionImage as string}
-                  alt="Hình ảnh câu hỏi"
-                  style={{ maxWidth: '100%', maxHeight: 280, borderRadius: 8, border: '1px solid #e2e8f0', objectFit: 'contain' }}
-                />
-              </div>
-            )}
-            <Radio.Group value={answers[q.id as string]} onChange={e => onSelectOption(q.id as string, e.target.value)} style={{ width: '100%' }}>
-              {['A', 'B', 'C', 'D'].map(opt => (
-                <div key={opt} style={{
-                  padding: '12px 16px', marginBottom: 8, borderRadius: 10,
-                  border: answers[q.id as string] === opt ? '2px solid #3b82f6' : '1px solid #e2e8f0',
-                  background: answers[q.id as string] === opt ? '#eff6ff' : '#fff',
-                  cursor: 'pointer', transition: 'all 0.15s',
-                }}>
-                  <Radio value={opt}>
-                    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, verticalAlign: 'middle' }}>
-                      <strong>{opt}.</strong>
-                      <MathRenderer content={q[`option${opt}`] as string} style={{ display: 'inline-block' }} />
-                    </div>
-                  </Radio>
+              {saveState[qId] === 'error' && (
+                <div style={{ color: '#dc2626', fontSize: 12, marginBottom: 8 }}>
+                  ⚠ Câu này chưa lưu được lên máy chủ — hệ thống đang thử lại / sẽ gửi khi nộp bài.
                 </div>
-              ))}
-            </Radio.Group>
-          </div>
-        ))}
+              )}
+              {(q.contextText as string) && (
+                <div style={{ padding: 12, background: '#f8fafc', borderRadius: 8, marginBottom: 12, color: '#475569', fontSize: 13, fontStyle: 'italic' }}>
+                  <MathRenderer content={q.contextText as string} />
+                </div>
+              )}
+              <MathRenderer className="question-text" content={q.questionText as string} style={{ marginBottom: 14, fontWeight: 500 }} />
+              {(q.questionImage as string) && (
+                <div style={{ textAlign: 'center', marginBottom: 14 }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={q.questionImage as string}
+                    alt="Hình ảnh câu hỏi"
+                    style={{ maxWidth: '100%', maxHeight: 280, borderRadius: 8, border: '1px solid #e2e8f0', objectFit: 'contain' }}
+                  />
+                </div>
+              )}
+              <div role="radiogroup" aria-label={`Câu ${q.displayOrder as number}`}>
+                {(['A', 'B', 'C', 'D'] as const).map(opt => {
+                  const isChecked = selected === opt;
+                  return (
+                    <div
+                      key={opt}
+                      onClick={() => onSelectOption(qId, opt)}
+                      className={`exam-option-row ${isChecked ? 'selected' : ''}`}
+                    >
+                      <Radio checked={isChecked} value={opt} style={{ marginRight: 0, flexShrink: 0 }} />
+                      <strong style={{ flexShrink: 0, minWidth: 20, color: isChecked ? '#1d4ed8' : '#1e293b' }}>{opt}.</strong>
+                      <div style={{ flex: 1, minWidth: 0, overflowX: 'auto' }}>
+                        <MathRenderer content={q[`option${opt}`] as string} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
 
-        <div style={{ textAlign: 'center', padding: '24px 0 48px' }}>
+        <div style={{ textAlign: 'center', padding: '20px 0 32px' }}>
           <Button type="primary" size="large" onClick={onSubmit} loading={submitting}
             style={{ height: 52, paddingInline: 48, borderRadius: 14, fontWeight: 700, fontSize: 16, background: 'linear-gradient(135deg, #22c55e, #16a34a)' }}>
-            📋 Nộp bài
+            📋 Nộp bài ({answeredCount}/{questions.length} câu)
           </Button>
         </div>
 
-        <div className="question-nav">
-          {questions.map((q, i) => (
-            <button key={q.id as string} className={`question-nav-btn ${answers[q.id as string] ? 'answered' : ''}`}
-              style={saveState[q.id as string] === 'error' ? { background: '#dc2626', borderColor: '#dc2626', color: '#fff' } : undefined}
-              title={saveState[q.id as string] === 'error' ? 'Chưa lưu được' : undefined}
-              onClick={() => document.querySelectorAll('.question-card')[i]?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
-              {q.displayOrder as number}
-            </button>
-          ))}
+        {/* Bottom Dock & Collapsible Question Map (never blocks questions on phone screens) */}
+        {navOpen && (
+          <div
+            onClick={() => setNavOpen(false)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.35)', zIndex: 95 }}
+          />
+        )}
+        <div className="exam-bottom-dock">
+          {navOpen && (
+            <div className="question-nav-sheet">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <strong style={{ fontSize: 13, color: '#0f172a' }}>
+                  Danh sách câu hỏi ({answeredCount}/{questions.length} đã chọn)
+                </strong>
+                <Button size="small" type="text" onClick={() => setNavOpen(false)}>Đóng ✕</Button>
+              </div>
+              <div className="question-nav-grid">
+                {questions.map((q, i) => {
+                  const qId = q.id as string;
+                  const hasErr = saveState[qId] === 'error';
+                  return (
+                    <button
+                      key={qId}
+                      type="button"
+                      className={`question-nav-btn ${answers[qId] ? 'answered' : ''}`}
+                      style={hasErr ? { background: '#dc2626', borderColor: '#dc2626', color: '#fff' } : undefined}
+                      title={hasErr ? 'Chưa lưu được' : undefined}
+                      onClick={() => {
+                        setNavOpen(false);
+                        document.querySelectorAll('.question-card')[i]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }}
+                    >
+                      {q.displayOrder as number}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          <div className="exam-dock-bar">
+            <Button
+              size="large"
+              onClick={() => setNavOpen(v => !v)}
+              style={{ flex: 1, height: 44, borderRadius: 10, fontWeight: 600 }}
+            >
+              🔢 Câu hỏi ({answeredCount}/{questions.length}) {navOpen ? '▼' : '▲'}
+            </Button>
+            <Button
+              type="primary"
+              size="large"
+              loading={submitting}
+              onClick={onSubmit}
+              style={{
+                height: 44,
+                paddingInline: 20,
+                borderRadius: 10,
+                fontWeight: 700,
+                background: 'linear-gradient(135deg, #22c55e, #16a34a)',
+              }}
+            >
+              📋 Nộp bài
+            </Button>
+          </div>
         </div>
       </div>
     </div>

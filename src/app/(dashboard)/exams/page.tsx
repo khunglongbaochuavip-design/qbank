@@ -52,6 +52,8 @@ export default function ExamsPage() {
   const [createStep, setCreateStep] = useState<1 | 2>(1);
   const [createOpen, setCreateOpen] = useState(false);
   const [form] = Form.useForm();
+  const [examName, setExamName] = useState('');
+  const [selectedMatrixId, setSelectedMatrixId] = useState('');
   const [loadingCandidates, setLoadingCandidates] = useState(false);
   const [groups, setGroups] = useState<MatrixGroup[]>([]);
   // selectedIds: Set of question IDs ticked by user
@@ -86,6 +88,8 @@ export default function ExamsPage() {
   const onNextStep = async () => {
     try {
       const values = await form.validateFields(['name', 'matrixId']);
+      setExamName(String(values.name || '').trim());
+      setSelectedMatrixId(String(values.matrixId || '').trim());
       setLoadingCandidates(true);
       const res = await api.get<{ matrix: Record<string, unknown>; groups: MatrixGroup[] }>(
         `/matrices/${values.matrixId}/candidates`
@@ -134,12 +138,19 @@ export default function ExamsPage() {
   // ── Create exam with selected questions ──────────────────────────────────
   const onCreateExam = async () => {
     if (selectedIds.size === 0) { message.error('Chưa chọn câu hỏi nào.'); return; }
+    const values = form.getFieldsValue();
+    const finalName = (examName || String(values.name || '')).trim();
+    const finalMatrixId = (selectedMatrixId || String(values.matrixId || '')).trim();
+    if (!finalName || !finalMatrixId) {
+      message.error('Tên đề thi và ma trận là bắt buộc.');
+      setCreateStep(1);
+      return;
+    }
     setCreating(true);
     try {
-      const values = form.getFieldsValue();
       const res = await api.post<{ exam: Record<string, unknown>; warnings: string[] }>('/exams', {
-        name: values.name,
-        matrixId: values.matrixId,
+        name: finalName,
+        matrixId: finalMatrixId,
         questionIds: Array.from(selectedIds),
       });
       const { warnings } = res;
@@ -151,6 +162,8 @@ export default function ExamsPage() {
       setCreateOpen(false);
       setCreateStep(1);
       form.resetFields();
+      setExamName('');
+      setSelectedMatrixId('');
       setGroups([]);
       setSelectedIds(new Set());
       load();
@@ -159,7 +172,7 @@ export default function ExamsPage() {
   };
 
   const onCloseCreate = () => {
-    setCreateOpen(false); setCreateStep(1); form.resetFields(); setGroups([]); setSelectedIds(new Set());
+    setCreateOpen(false); setCreateStep(1); form.resetFields(); setExamName(''); setSelectedMatrixId(''); setGroups([]); setSelectedIds(new Set());
   };
 
   // ── Finalize & Delete ────────────────────────────────────────────────────
@@ -248,14 +261,14 @@ export default function ExamsPage() {
           )
         }
       >
-        {/* Step 1 */}
-        {createStep === 1 && (
-          <Form form={form} layout="vertical">
-            <Form.Item name="name" label="Tên đề thi" rules={[{ required: true }]}>
-              <Input placeholder="VD: Kiểm tra Vật Lý 11 — HK1" />
+        {/* Step 1 — kept mounted with display:none in Step 2 so Form values never unmount */}
+        <div style={{ display: createStep === 1 ? 'block' : 'none' }}>
+          <Form form={form} layout="vertical" preserve>
+            <Form.Item name="name" label="Tên đề thi" rules={[{ required: true, message: 'Vui lòng nhập tên đề thi' }]}>
+              <Input placeholder="VD: Kiểm tra Vật Lý 11 — HK1" onChange={e => setExamName(e.target.value)} />
             </Form.Item>
-            <Form.Item name="matrixId" label="Ma trận đặc tả" rules={[{ required: true }]}>
-              <Select placeholder="Chọn ma trận..." showSearch optionFilterProp="children">
+            <Form.Item name="matrixId" label="Ma trận đặc tả" rules={[{ required: true, message: 'Vui lòng chọn ma trận' }]}>
+              <Select placeholder="Chọn ma trận..." showSearch optionFilterProp="children" onChange={v => setSelectedMatrixId(v)}>
                 {matrices.map((m) => {
                   const itemCount = Number(
                     ((m._count as Record<string, unknown>)?.examQuestions) ??
@@ -273,7 +286,7 @@ export default function ExamsPage() {
               </Select>
             </Form.Item>
           </Form>
-        )}
+        </div>
 
         {/* Step 2 — Question selection */}
         {createStep === 2 && (

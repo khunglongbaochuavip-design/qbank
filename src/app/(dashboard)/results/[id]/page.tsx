@@ -29,7 +29,7 @@ export default function AttemptResultPage() {
     <div style={{ maxWidth: 800, margin: '0 auto' }}>
       <div className="page-header"><h2>📋 Kết quả bài thi</h2></div>
 
-      <div className="content-card" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, textAlign: 'center' }}>
+      <div className="content-card" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(105px, 1fr))', gap: 12, textAlign: 'center' }}>
         <div><div style={{ color: '#64748b', fontSize: 13 }}>Học sinh</div><div style={{ fontWeight: 700, fontSize: 16 }}>{student.fullName as string}</div></div>
         <div><div style={{ color: '#64748b', fontSize: 13 }}>Điểm</div>
           <Tag color={(attempt.score as number) >= 5 ? 'green' : 'red'} style={{ fontSize: 24, fontWeight: 700, padding: '6px 20px' }}>{attempt.score as number}</Tag></div>

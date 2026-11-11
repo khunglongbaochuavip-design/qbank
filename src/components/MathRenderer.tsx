@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, memo } from 'react';
 
 interface MathRendererProps {
   /** HTML/text string that may contain MathML <math>...</math> or LaTeX ($...$, $$...$$, \(...\), \[...\]) */
@@ -9,54 +9,104 @@ interface MathRendererProps {
   style?: React.CSSProperties;
 }
 
+// ── Global batched & serialized MathJax 3 typesetting queue ───────────────
+// Prevents concurrent typesetPromise() races when 20+ table rows or modal fields mount at once.
+const pendingElements = new Set<HTMLElement>();
+let flushTimer: ReturnType<typeof setTimeout> | null = null;
+let typesetChain: Promise<void> = Promise.resolve();
+
+function getMathJax(): {
+  typesetPromise?: (els?: HTMLElement[]) => Promise<void>;
+  typesetClear?: (els?: HTMLElement[]) => void;
+  startup?: { promise?: Promise<void> };
+} | null {
+  if (typeof window === 'undefined') return null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (window as any).MathJax || null;
+}
+
+function scheduleFlush(delayMs = 25) {
+  if (flushTimer) return;
+  flushTimer = setTimeout(() => {
+    flushTimer = null;
+    const mj = getMathJax();
+    if (!mj || typeof mj.typesetPromise !== 'function') {
+      // MathJax script still loading from CDN — retry shortly
+      if (pendingElements.size > 0) scheduleFlush(120);
+      return;
+    }
+
+    const batch = Array.from(pendingElements).filter(el => el.isConnected);
+    pendingElements.clear();
+    if (batch.length === 0) return;
+
+    typesetChain = typesetChain
+      .then(async () => {
+        if (mj.startup?.promise) {
+          await mj.startup.promise;
+        }
+        const connected = batch.filter(el => el.isConnected);
+        if (connected.length === 0) return;
+        if (typeof mj.typesetClear === 'function') {
+          mj.typesetClear(connected);
+        }
+        await mj.typesetPromise!(connected);
+      })
+      .catch(err => {
+        console.error('MathJax typeset error:', err);
+      });
+  }, delayMs);
+}
+
+function enqueueElement(el: HTMLElement) {
+  pendingElements.add(el);
+  scheduleFlush(25);
+}
+
 /**
  * MathRenderer
  * Renders content that may contain MathML 3.0 (<math>...</math>) and/or LaTeX ($...$, $$...$$, \(...\), \[...\]).
- * Uses MathJax 3 (tex-mml-chtml.js loaded globally in layout.tsx) to typeset the math.
+ * Uses a global batched queue for MathJax 3 so tables, modals, and exam cards always typeset reliably without F5.
  */
-export default function MathRenderer({ content, className, style }: MathRendererProps) {
+function MathRendererInner({ content, className, style }: MathRendererProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    el.innerHTML = content || '';
+    const raw = content || '';
+    el.innerHTML = raw;
+    enqueueElement(el);
 
-    const typeset = () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const MathJax = (window as any).MathJax;
-      if (MathJax && typeof MathJax.typesetPromise === 'function' && ref.current) {
-        if (typeof MathJax.typesetClear === 'function') {
-          MathJax.typesetClear([ref.current]);
+    // Second pass after modal/table animation settles if raw math delimiters are still un-typeset
+    const hasMath = raw.includes('$') || raw.includes('\\(') || raw.includes('\\[') || raw.includes('<math');
+    if (hasMath) {
+      const verifyTimer = setTimeout(() => {
+        if (!el.isConnected) return;
+        if (!el.querySelector('mjx-container')) {
+          el.innerHTML = raw;
+          enqueueElement(el);
         }
-        MathJax.typesetPromise([ref.current]).catch(console.error);
-      }
-    };
-
-    // MathJax may still be loading; poll until ready
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if ((window as any).MathJax?.typesetPromise) {
-      typeset();
-    } else {
-      const poll = setInterval(() => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        if ((window as any).MathJax?.typesetPromise) {
-          clearInterval(poll);
-          typeset();
-        }
-      }, 200);
-      return () => clearInterval(poll);
+      }, 350);
+      return () => {
+        clearTimeout(verifyTimer);
+        pendingElements.delete(el);
+      };
     }
+
+    return () => {
+      pendingElements.delete(el);
+    };
   }, [content]);
 
   return (
     <div
       ref={ref}
-      className={className}
+      className={`math-renderer ${className || ''}`.trim()}
       style={style}
-      // dangerouslySetInnerHTML is intentional: content is MathML / LaTeX authored by
-      // admin/teachers, not user-submitted HTML from the public.
-      dangerouslySetInnerHTML={{ __html: content || '' }}
     />
   );
 }
+
+const MathRenderer = memo(MathRendererInner);
+export default MathRenderer;

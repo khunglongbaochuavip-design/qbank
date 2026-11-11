@@ -31,7 +31,7 @@ export default function MyResultsPage() {
     <div>
       <div className="page-header"><h2><BarChartOutlined /> Kết quả của tôi</h2></div>
       <div className="content-card" style={{ padding: 0 }}>
-        <Table dataSource={results} columns={columns} rowKey="id" loading={loading} size="middle" />
+        <Table dataSource={results} columns={columns} rowKey="id" loading={loading} size="middle" scroll={{ x: 560 }} />
       </div>
     </div>
   );

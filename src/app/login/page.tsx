@@ -13,9 +13,9 @@ function LoginForm() {
   const onFinish = async (values: { email: string; password: string }) => {
     setLoading(true);
     try {
-      await login(values.email, values.password);
+      const u = await login(values.email, values.password);
       message.success('Đăng nhập thành công!');
-      router.push('/dashboard');
+      router.push(u.role === 'student' ? '/my-exams' : '/dashboard');
     } catch (err: unknown) {
       message.error((err as Error).message || 'Đăng nhập thất bại.');
     } finally {

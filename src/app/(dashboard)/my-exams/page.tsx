@@ -1,6 +1,6 @@
 'use client';
 import React, { useEffect, useState } from 'react';
-import { Table, Button, Tag, message, Input, Space, Card, Typography, Modal } from 'antd';
+import { Table, Button, Tag, message, Input, Card, Typography, Modal, Empty } from 'antd';
 import { PlayCircleOutlined, LoginOutlined } from '@ant-design/icons';
 import { api } from '@/lib/api-client';
 import { useRouter } from 'next/navigation';
@@ -37,9 +37,10 @@ export default function MyExamsPage() {
       // If session is active, ask to start exam right away
       if (res.session.status === 'active') {
         Modal.confirm({
+          centered: true,
           title: 'Vào thi ngay?',
           content: `Phiên thi "${res.session.name}" đang diễn ra. Bạn có muốn vào làm bài ngay không?`,
-          okText: 'Vào thi',
+          okText: 'Vào thi ngay',
           cancelText: 'Để sau',
           onOk: () => router.push(`/take-exam/${res.session.id}`),
         });
@@ -51,10 +52,10 @@ export default function MyExamsPage() {
   const columns = [
     { title: 'Tên phiên thi', dataIndex: 'name', render: (v: string) => <span style={{ fontWeight: 600 }}>{v}</span> },
     { title: 'Đề thi', dataIndex: ['exam', 'name'] },
-    { title: 'Số câu', dataIndex: ['exam', '_count', 'examQuestions'] },
-    { title: 'Trạng thái', dataIndex: 'status', width: 140,
+    { title: 'Số câu', dataIndex: ['exam', '_count', 'examQuestions'], width: 80 },
+    { title: 'Trạng thái', dataIndex: 'status', width: 130,
       render: (s: string) => <Tag color={SESSION_STATUS_COLORS[s]}>{SESSION_STATUS_LABELS[s]}</Tag> },
-    { title: 'Bài làm', dataIndex: 'attempt', width: 160,
+    { title: 'Bài làm', dataIndex: 'attempt', width: 150,
       render: (a: Record<string, unknown> | null) => a
         ? <Tag color={a.status === 'in_progress' ? 'blue' : 'green'}>{a.status === 'in_progress' ? '⏳ Đang làm' : `✅ Đã nộp (${a.score} đ)`}</Tag>
         : <Tag color="default">Chưa làm</Tag>
@@ -73,35 +74,114 @@ export default function MyExamsPage() {
     <div>
       <div className="page-header"><h2><PlayCircleOutlined /> Bài thi của tôi</h2></div>
 
-      {/* Join by code card */}
+      {/* Join by code card — optimized for mobile portrait & desktop */}
       <Card
-        style={{ marginBottom: 20, borderRadius: 12, background: 'linear-gradient(135deg, #eff6ff, #f0fdf4)', border: '1px solid #bfdbfe' }}
-        bodyStyle={{ padding: '16px 20px' }}
+        style={{ marginBottom: 20, borderRadius: 14, background: 'linear-gradient(135deg, #eff6ff, #f0fdf4)', border: '1px solid #bfdbfe' }}
+        styles={{ body: { padding: '16px' } }}
       >
-        <Typography.Text strong style={{ fontSize: 15, display: 'block', marginBottom: 8 }}>
+        <Typography.Text strong style={{ fontSize: 16, display: 'block', marginBottom: 6 }}>
           <LoginOutlined /> Tham gia bài thi bằng mã
         </Typography.Text>
         <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 12, fontSize: 13 }}>
-          Nhập mã tham gia do giáo viên cung cấp (gồm 6 ký tự, ví dụ: <strong>A3KT7P</strong>)
+          Nhập mã ca thi 6 ký tự do giáo viên cung cấp (ví dụ: <strong>A3KT7P</strong>)
         </Typography.Text>
-        <Space>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <Input
             value={joinCode}
             onChange={e => setJoinCode(e.target.value.toUpperCase())}
             onPressEnter={onJoin}
-            placeholder="Nhập mã tham gia..."
+            placeholder="NHẬP MÃ..."
             maxLength={8}
-            style={{ width: 220, fontFamily: 'monospace', fontSize: 18, fontWeight: 700, letterSpacing: 4, textAlign: 'center' }}
+            autoCapitalize="characters"
+            autoComplete="off"
+            style={{
+              flex: '1 1 170px',
+              maxWidth: 280,
+              height: 46,
+              fontFamily: 'monospace',
+              fontSize: 18,
+              fontWeight: 700,
+              letterSpacing: 3,
+              textAlign: 'center',
+              borderRadius: 10,
+            }}
           />
-          <Button type="primary" onClick={onJoin} loading={joining} icon={<LoginOutlined />}
-            style={{ background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)', fontWeight: 600 }}>
+          <Button
+            type="primary"
+            onClick={onJoin}
+            loading={joining}
+            icon={<LoginOutlined />}
+            style={{
+              height: 46,
+              paddingInline: 24,
+              borderRadius: 10,
+              background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)',
+              fontWeight: 700,
+              fontSize: 15,
+              flex: '0 0 auto',
+            }}
+          >
             Vào thi
           </Button>
-        </Space>
+        </div>
       </Card>
 
-      <div className="content-card" style={{ padding: 0 }}>
-        <Table dataSource={sessions} columns={columns} rowKey="id" loading={loading} size="middle" />
+      {/* Mobile card list (shown on < 768px) */}
+      <div className="mobile-only-list">
+        {loading ? (
+          <Card loading style={{ borderRadius: 12 }} />
+        ) : sessions.length === 0 ? (
+          <Card style={{ borderRadius: 12, textAlign: 'center' }}>
+            <Empty description="Chưa có phiên thi nào. Hãy nhập mã tham gia ở trên." />
+          </Card>
+        ) : (
+          sessions.map((rec) => {
+            const exam = rec.exam as Record<string, unknown> | undefined;
+            const qCount = (exam?._count as { examQuestions?: number } | undefined)?.examQuestions ?? 0;
+            const attempt = rec.attempt as Record<string, unknown> | null;
+            const canStart = rec.status === 'active' && (!attempt || attempt.status === 'in_progress');
+            return (
+              <div key={rec.id as string} className="content-card" style={{ padding: 16, marginBottom: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
+                  <div style={{ fontWeight: 700, fontSize: 16, color: '#0f172a', flex: 1 }}>{rec.name as string}</div>
+                  <Tag color={SESSION_STATUS_COLORS[rec.status as string]} style={{ margin: 0 }}>
+                    {SESSION_STATUS_LABELS[rec.status as string]}
+                  </Tag>
+                </div>
+                <div style={{ fontSize: 13, color: '#475569', marginBottom: 10 }}>
+                  Đề: <strong>{(exam?.name as string) || '—'}</strong> · {qCount} câu · {(rec.durationMinutes as number) || 60} phút
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <div>
+                    {attempt ? (
+                      <Tag color={attempt.status === 'in_progress' ? 'blue' : 'green'}>
+                        {attempt.status === 'in_progress' ? '⏳ Đang làm dở' : `✅ Đã nộp (${attempt.score} điểm)`}
+                      </Tag>
+                    ) : (
+                      <Tag color="default">Chưa làm</Tag>
+                    )}
+                  </div>
+                  {canStart && (
+                    <Button
+                      type="primary"
+                      size="large"
+                      icon={<PlayCircleOutlined />}
+                      onClick={() => router.push(`/take-exam/${rec.id}`)}
+                      style={{ borderRadius: 10, fontWeight: 700, flex: '1 1 160px' }}
+                    >
+                      {attempt ? 'Tiếp tục làm bài' : 'Bắt đầu làm bài'}
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* Desktop table (shown on >= 768px) */}
+      <div className="content-card desktop-only-table" style={{ padding: 0 }}>
+        <Table dataSource={sessions} columns={columns} rowKey="id" loading={loading} size="middle" scroll={{ x: 640 }} />
       </div>
     </div>
   );

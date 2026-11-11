@@ -195,34 +195,55 @@ body {
 
 /* ── Exam Taking ──────────────────────────────────────────── */
 .exam-container {
-  max-width: 900px;
+  max-width: 860px;
   margin: 0 auto;
-  padding: 24px;
+  padding: 16px;
 }
 .exam-header {
   background: var(--accent-gradient);
   color: #fff;
-  padding: 24px 32px;
-  border-radius: 16px;
-  margin-bottom: 24px;
+  padding: 14px 20px;
+  border-radius: 14px;
+  margin-bottom: 16px;
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 12px;
+  position: sticky;
+  top: 8px;
+  z-index: 90;
+  box-shadow: var(--shadow-md);
+}
+.exam-header-title {
+  font-size: 16px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.exam-header-meta {
+  font-size: 12px;
+  opacity: 0.92;
+  margin-top: 2px;
 }
 .exam-timer {
-  font-size: 28px;
-  font-weight: 700;
+  font-size: 24px;
+  font-weight: 800;
   font-variant-numeric: tabular-nums;
+  background: rgba(15, 23, 42, 0.25);
+  padding: 6px 12px;
+  border-radius: 10px;
+  flex-shrink: 0;
 }
-.exam-timer.warning { color: #fbbf24; }
-.exam-timer.danger { color: #ef4444; animation: pulse 1s ease-in-out infinite; }
+.exam-timer.warning { color: #fde047; }
+.exam-timer.danger { color: #fecaca; background: rgba(220, 38, 38, 0.45); animation: pulse 1s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
 .question-card {
   background: #fff;
-  border-radius: 16px;
-  padding: 32px;
-  margin-bottom: 16px;
+  border-radius: 14px;
+  padding: 20px;
+  margin-bottom: 14px;
   border: 1px solid var(--border-color);
   box-shadow: var(--shadow-sm);
 }
@@ -230,42 +251,98 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 36px; height: 36px;
-  border-radius: 10px;
+  padding: 4px 12px;
+  height: 32px;
+  border-radius: 8px;
   background: var(--accent-gradient);
   color: #fff;
   font-weight: 700;
-  font-size: 14px;
-  margin-bottom: 16px;
+  font-size: 13px;
+  margin-bottom: 12px;
 }
 .question-text {
   font-size: 16px;
-  line-height: 1.7;
-  margin-bottom: 20px;
+  line-height: 1.65;
+  margin-bottom: 16px;
+  overflow-x: auto;
 }
 
-.question-nav {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
+.exam-option-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  background: rgba(255,255,255,0.95);
-  backdrop-filter: blur(10px);
-  padding: 16px;
-  border-radius: 16px;
-  box-shadow: var(--shadow-lg);
-  max-width: 280px;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #fff;
+  cursor: pointer;
+  transition: all 0.15s;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.exam-option-row:active {
+  transform: scale(0.995);
+}
+.exam-option-row.selected {
+  border: 2px solid #3b82f6;
+  background: #eff6ff;
+}
+
+/* MathJax responsive container so wide formulas never break phone screens */
+.math-renderer {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+mjx-container {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  vertical-align: middle;
+}
+
+.exam-bottom-dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
   z-index: 100;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.96);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid var(--border-color);
+  box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.08);
+}
+.exam-dock-bar {
+  max-width: 836px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.question-nav-sheet {
+  max-width: 836px;
+  margin: 0 auto 10px;
+  background: #fff;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 12px;
+  max-height: 48vh;
+  overflow-y: auto;
+}
+.question-nav-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+  gap: 6px;
 }
 .question-nav-btn {
-  width: 36px; height: 36px;
+  height: 38px;
   border-radius: 8px;
   border: 1px solid var(--border-color);
   background: #fff;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   display: flex;
   align-items: center;
@@ -274,6 +351,9 @@ body {
 }
 .question-nav-btn.answered { background: var(--accent-primary); color: #fff; border-color: var(--accent-primary); }
 .question-nav-btn.current { border-color: var(--accent-primary); box-shadow: 0 0 0 2px rgba(59,130,246,0.3); }
+
+.mobile-only-list { display: none; }
+.desktop-only-table { display: block; }
 
 /* ── Footer ───────────────────────────────────────────────── */
 .sidebar-footer {
@@ -300,8 +380,19 @@ body {
 
 /* ── Responsive ───────────────────────────────────────────── */
 @media (max-width: 768px) {
-  .app-content { padding: 16px; }
-  .stat-grid { grid-template-columns: 1fr; }
-  .login-card { width: 100%; margin: 16px; border-radius: 16px; padding: 32px 24px; }
-  .question-nav { bottom: 10px; right: 10px; max-width: 200px; }
+  .app-header { padding: 0 12px !important; height: 54px !important; }
+  .app-content { padding: 12px; }
+  .page-header { flex-direction: column; align-items: flex-start; gap: 10px; margin-bottom: 16px; }
+  .page-header h2 { font-size: 18px; }
+  .stat-grid { grid-template-columns: 1fr; gap: 12px; }
+  .content-card { padding: 14px; margin-bottom: 14px; }
+  .login-card { width: 100%; margin: 16px; border-radius: 16px; padding: 32px 20px; }
+  .exam-container { padding: 10px; }
+  .exam-header { padding: 10px 14px; border-radius: 12px; top: 4px; }
+  .exam-header-title { font-size: 14px; }
+  .exam-timer { font-size: 20px; padding: 4px 10px; }
+  .question-card { padding: 14px; border-radius: 12px; }
+  .question-text { font-size: 15px; }
+  .mobile-only-list { display: block; }
+  .desktop-only-table { display: none; }
 }
