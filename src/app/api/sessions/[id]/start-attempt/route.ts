@@ -39,6 +39,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       id: string;
       startedAt: Date;
       status: string;
+      awayCount?: number;
+      awayTotalSeconds?: number;
       questions: { id: string; questionId: string; displayOrder: number; snapshotContent: string; optionMap: string }[];
       answers: { questionId: string; selectedOption: string | null; isCorrect: boolean }[];
     }, isReconnect: boolean) => {
@@ -94,7 +96,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       });
 
       return success({
-        attempt: { id: attempt.id, startedAt: attempt.startedAt, authoritativeRemainingSeconds: remainingSeconds },
+        attempt: {
+          id: attempt.id,
+          startedAt: attempt.startedAt,
+          authoritativeRemainingSeconds: remainingSeconds,
+          awayCount: attempt.awayCount ?? 0,
+          awayTotalSeconds: attempt.awayTotalSeconds ?? 0,
+        },
         session: { id: session.id, name: session.name, durationMinutes: session.durationMinutes },
         questions,
       });

@@ -10,7 +10,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     if (user.role !== 'student') return forbidden('Chỉ dành cho học sinh.');
 
     const { id: sessionId } = await params;
-    const { questionId, selectedOption, clientTs } = await request.json();
+    const { questionId, selectedOption, clientTs, awayCount, awayTotalSeconds } = await request.json();
     if (!questionId) return badRequest('Thiếu mã câu hỏi.');
 
     const attempt = await prisma.examAttempt.findUnique({
@@ -36,8 +36,18 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     );
     if (!result.ok) return badRequest(result.error);
 
+    const updateAttemptData: { lastSavedAt: Date; awayCount?: number; awayTotalSeconds?: number } = {
+      lastSavedAt: new Date(),
+    };
+    if (typeof awayCount === 'number' && Number.isFinite(awayCount)) {
+      updateAttemptData.awayCount = Math.max(attempt.awayCount || 0, Math.floor(awayCount));
+    }
+    if (typeof awayTotalSeconds === 'number' && Number.isFinite(awayTotalSeconds)) {
+      updateAttemptData.awayTotalSeconds = Math.max(attempt.awayTotalSeconds || 0, Math.floor(awayTotalSeconds));
+    }
+
     await prisma.examAttempt.update({
-      where: { id: attempt.id }, data: { lastSavedAt: new Date() },
+      where: { id: attempt.id }, data: updateAttemptData,
     });
 
     return success({ saved: true, applied: result.applied });

@@ -27,7 +27,13 @@ function TakeExamInner() {
   const [collected, setCollected] = useState(false); // session ended / attempt closed by the server
   const [submitting, setSubmitting] = useState(false);
   const [navOpen, setNavOpen] = useState(false);
+  const [awayCount, setAwayCount] = useState(0);
+  const [awayTotalSeconds, setAwayTotalSeconds] = useState(0);
+  const [lastAwaySeconds, setLastAwaySeconds] = useState(0);
+  const [awayWarningOpen, setAwayWarningOpen] = useState(false);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const awayStartRef = useRef<number | null>(null);
+  const awayRef = useRef<{ count: number; total: number }>({ count: 0, total: 0 });
 
   // Latest choice per question with a strictly increasing click timestamp (newer always wins on the server)
   const latestRef = useRef<Record<string, { opt: string; ts: number }>>({});
@@ -65,7 +71,13 @@ function TakeExamInner() {
       .then((d: unknown) => {
         const res = d as Record<string, unknown>;
         setData(res);
-        setRemaining((res.attempt as Record<string, unknown>).authoritativeRemainingSeconds as number);
+        const att = res.attempt as Record<string, unknown>;
+        setRemaining(att.authoritativeRemainingSeconds as number);
+        const initCount = Number(att.awayCount || 0);
+        const initSec = Number(att.awayTotalSeconds || 0);
+        awayRef.current = { count: initCount, total: initSec };
+        setAwayCount(initCount);
+        setAwayTotalSeconds(initSec);
         const questions = res.questions as Record<string, unknown>[];
         const saved: Record<string, string> = {};
         const states: Record<string, SaveState> = {};
@@ -102,6 +114,56 @@ function TakeExamInner() {
     return () => window.removeEventListener('beforeunload', handler);
   }, [saveState]);
 
+  // Track when the student leaves the exam screen (switches app, switches tab, locks screen, loses focus)
+  useEffect(() => {
+    if (!data || submitted || collected) return;
+
+    const handleLeave = () => {
+      if (finishedRef.current) return;
+      if (awayStartRef.current === null) {
+        awayStartRef.current = Date.now();
+      }
+    };
+
+    const handleReturn = () => {
+      if (finishedRef.current) return;
+      if (document.hidden) return;
+      if (awayStartRef.current === null) return;
+      const deltaSec = Math.round((Date.now() - awayStartRef.current) / 1000);
+      awayStartRef.current = null;
+      // Ignore sub-second focus blips (e.g. mobile browser address bar animation)
+      if (deltaSec < 1) return;
+
+      const nextCount = awayRef.current.count + 1;
+      const nextTotal = awayRef.current.total + deltaSec;
+      awayRef.current = { count: nextCount, total: nextTotal };
+      setAwayCount(nextCount);
+      setAwayTotalSeconds(nextTotal);
+      setLastAwaySeconds(deltaSec);
+      setAwayWarningOpen(true);
+
+      api.post(`/sessions/${sessionId}/status`, {
+        awayCount: nextCount,
+        awayTotalSeconds: nextTotal,
+        lastAwaySeconds: deltaSec,
+      }).catch(() => { /* synced again on next answer/submit */ });
+    };
+
+    const onVisibilityChange = () => {
+      if (document.hidden) handleLeave();
+      else handleReturn();
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    window.addEventListener('blur', handleLeave);
+    window.addEventListener('focus', handleReturn);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      window.removeEventListener('blur', handleLeave);
+      window.removeEventListener('focus', handleReturn);
+    };
+  }, [data, submitted, collected, sessionId]);
+
   const saveAnswer = useCallback((questionId: string, selectedOption: string, ts: number) => {
     const run = (async () => {
       for (let i = 0; i < RETRY_DELAYS_MS.length; i++) {
@@ -109,7 +171,13 @@ function TakeExamInner() {
         // A newer click for this question exists — let that request handle saving
         if (latestRef.current[questionId]?.ts !== ts || finishedRef.current) return;
         try {
-          await api.put(`/sessions/${sessionId}/answer`, { questionId, selectedOption, clientTs: ts });
+          await api.put(`/sessions/${sessionId}/answer`, {
+            questionId,
+            selectedOption,
+            clientTs: ts,
+            awayCount: awayRef.current.count,
+            awayTotalSeconds: awayRef.current.total,
+          });
           if (latestRef.current[questionId]?.ts === ts) {
             setSaveState(prev => ({ ...prev, [questionId]: 'saved' }));
           }
@@ -157,9 +225,24 @@ function TakeExamInner() {
       const finalAnswers = Object.entries(latestRef.current).map(([questionId, v]) => ({
         questionId, selectedOption: v.opt, clientTs: v.ts,
       }));
+      if (awayStartRef.current !== null) {
+        const extraSec = Math.round((Date.now() - awayStartRef.current) / 1000);
+        awayStartRef.current = null;
+        if (extraSec >= 1) {
+          awayRef.current = {
+            count: awayRef.current.count + 1,
+            total: awayRef.current.total + extraSec,
+          };
+        }
+      }
       for (let i = 0; i < 3; i++) {
         try {
-          await api.post(`/sessions/${sessionId}/submit`, { autoSubmit, answers: finalAnswers });
+          await api.post(`/sessions/${sessionId}/submit`, {
+            autoSubmit,
+            answers: finalAnswers,
+            awayCount: awayRef.current.count,
+            awayTotalSeconds: awayRef.current.total,
+          });
           markFinished('submitted');
           if (autoSubmit) message.warning('Hết giờ! Bài thi đã được tự động nộp.');
           else message.success('Đã nộp bài thành công!');
@@ -264,12 +347,52 @@ function TakeExamInner() {
               ) : (
                 <span>✓ Đã lưu</span>
               )}
+              {awayCount > 0 && (
+                <span style={{ color: '#fde047', fontWeight: 600, marginLeft: 6 }}>
+                  · 👁️ Thoát màn hình: {awayCount} lần ({awayTotalSeconds}s)
+                </span>
+              )}
             </div>
           </div>
           <div className={`exam-timer ${timerClass}`}>
             {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
           </div>
         </div>
+
+        {/* Away-screen Warning Modal */}
+        <Modal
+          open={awayWarningOpen}
+          centered
+          closable={false}
+          maskClosable={false}
+          title={<span style={{ color: '#dc2626', fontWeight: 700 }}>⚠️ Cảnh báo rời khỏi màn hình thi</span>}
+          footer={[
+            <Button
+              key="ok"
+              type="primary"
+              danger
+              size="large"
+              style={{ width: '100%', fontWeight: 700, borderRadius: 10 }}
+              onClick={() => setAwayWarningOpen(false)}
+            >
+              Tôi đã hiểu và quay lại làm bài
+            </Button>,
+          ]}
+        >
+          <div style={{ fontSize: 14, lineHeight: 1.6, color: '#1e293b' }}>
+            <p style={{ marginBottom: 8 }}>
+              Hệ thống phát hiện bạn vừa rời khỏi giao diện bài thi (chuyển ứng dụng, chuyển tab hoặc tắt màn hình) trong{' '}
+              <strong style={{ color: '#dc2626', fontSize: 16 }}>{lastAwaySeconds} giây</strong>.
+            </p>
+            <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '10px 14px', marginBottom: 8 }}>
+              <div>• Số lần rời màn hình: <strong style={{ color: '#dc2626' }}>{awayCount} lần</strong></div>
+              <div>• Tổng thời gian rời màn hình: <strong style={{ color: '#dc2626' }}>{awayTotalSeconds} giây</strong></div>
+            </div>
+            <p style={{ marginBottom: 0, fontSize: 13, color: '#64748b' }}>
+              Toàn bộ số lần và thời gian thoát màn hình đã được hệ thống ghi nhận tự động vào kết quả bài thi để giám thị kiểm tra tính trung thực.
+            </p>
+          </div>
+        </Modal>
 
         {/* Question Cards */}
         {questions.map((q) => {

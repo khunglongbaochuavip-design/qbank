@@ -62,6 +62,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
         numCorrect: attempt.numCorrect, numWrong: attempt.numWrong,
         startedAt: attempt.startedAt, submittedAt: attempt.submittedAt,
         status: attempt.status,
+        awayCount: attempt.awayCount ?? 0,
+        awayTotalSeconds: attempt.awayTotalSeconds ?? 0,
       },
       student: attempt.student,
       exam: attempt.session.exam,

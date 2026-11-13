@@ -84,6 +84,8 @@ export async function GET(request: Request) {
       { header: 'Điểm (thang 10)', width: 15 },
       { header: 'Số câu đúng', width: 13 },
       { header: 'Số câu sai', width: 13 },
+      { header: 'Số lần thoát màn hình', width: 20 },
+      { header: 'Thời gian thoát màn hình (giây)', width: 26 },
       { header: 'Trạng thái', width: 34 },
       { header: 'Thời gian nộp', width: 20 },
     ];
@@ -92,7 +94,20 @@ export async function GET(request: Request) {
     let stt = 0;
     session.attempts.forEach((att) => {
       const s = att.student as Stu;
-      wsA.addRow([++stt, s.studentCode || s.id.substring(0, 8), s.fullName, s.className || '—', s.email, att.score, att.numCorrect, att.numWrong, STATUS_LABELS[att.status] || att.status, att.submittedAt?.toLocaleString('vi-VN')]);
+      wsA.addRow([
+        ++stt,
+        s.studentCode || s.id.substring(0, 8),
+        s.fullName,
+        s.className || '—',
+        s.email,
+        att.score,
+        att.numCorrect,
+        att.numWrong,
+        att.awayCount ?? 0,
+        att.awayTotalSeconds ?? 0,
+        STATUS_LABELS[att.status] || att.status,
+        att.submittedAt?.toLocaleString('vi-VN'),
+      ]);
     });
 
     // Assigned but no submitted attempt → "Vắng thi"
@@ -100,15 +115,30 @@ export async function GET(request: Request) {
     const absent = session.participants.filter(p => !submittedIds.has(p.studentId));
     if (absent.length > 0) {
       const inProgress = await prisma.examAttempt.findMany({
-        where: { sessionId, status: 'in_progress' }, select: { studentId: true },
+        where: { sessionId, status: 'in_progress' },
+        select: { studentId: true, awayCount: true, awayTotalSeconds: true },
       });
-      const inProgressIds = new Set(inProgress.map(a => a.studentId));
+      const inProgressMap = new Map(inProgress.map(a => [a.studentId, a]));
       absent
         .sort((a, b) => a.student.fullName.localeCompare(b.student.fullName, 'vi'))
         .forEach(p => {
           const s = p.student as Stu;
-          const st = inProgressIds.has(s.id) ? 'in_progress' : 'absent';
-          const r = wsA.addRow([++stt, s.studentCode || s.id.substring(0, 8), s.fullName, s.className || '—', s.email, null, null, null, STATUS_LABELS[st], null]);
+          const ip = inProgressMap.get(s.id);
+          const st = ip ? 'in_progress' : 'absent';
+          const r = wsA.addRow([
+            ++stt,
+            s.studentCode || s.id.substring(0, 8),
+            s.fullName,
+            s.className || '—',
+            s.email,
+            null,
+            null,
+            null,
+            ip ? (ip.awayCount ?? 0) : null,
+            ip ? (ip.awayTotalSeconds ?? 0) : null,
+            STATUS_LABELS[st],
+            null,
+          ]);
           r.eachCell(c => { c.font = { color: { argb: 'FF9CA3AF' }, italic: true }; });
         });
     }

@@ -45,6 +45,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     // Grade the attempt (total = all questions of the attempt)
     const { numCorrect, numWrong, score } = await gradeAttempt(attempt.id);
     const submittedStatus = body.autoSubmit ? 'auto_submitted' : 'submitted';
+    const finalAwayCount = Math.max(attempt.awayCount || 0, Math.floor(Number(body.awayCount) || 0));
+    const finalAwaySeconds = Math.max(attempt.awayTotalSeconds || 0, Math.floor(Number(body.awayTotalSeconds) || 0));
 
     // Only transition if still in progress (guards against double submit / session end race)
     const res = await prisma.examAttempt.updateMany({
@@ -53,6 +55,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
         status: submittedStatus as 'submitted' | 'auto_submitted',
         submittedAt: new Date(),
         numCorrect, numWrong, score,
+        awayCount: finalAwayCount,
+        awayTotalSeconds: finalAwaySeconds,
       },
     });
     if (res.count === 0) return badRequest('Bài thi đã được nộp.');

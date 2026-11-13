@@ -47,6 +47,17 @@ export default function ResultsPage() {
     { title: 'Điểm', dataIndex: 'score', width: 80, render: (v: number) => <Tag color={v >= 5 ? 'green' : 'red'} style={{ fontWeight: 700 }}>{v}</Tag> },
     { title: 'Đúng', dataIndex: 'numCorrect', width: 60 },
     { title: 'Sai', dataIndex: 'numWrong', width: 60 },
+    {
+      title: 'Thoát màn hình',
+      key: 'away',
+      width: 150,
+      render: (_: unknown, rec: Record<string, unknown>) => {
+        const count = Number(rec.awayCount || 0);
+        const sec = Number(rec.awayTotalSeconds || 0);
+        const color = count === 0 ? 'green' : (sec >= 30 || count >= 3 ? 'red' : 'orange');
+        return <Tag color={color} style={{ fontWeight: 600 }}>{count} lần ({sec}s)</Tag>;
+      },
+    },
     { title: '', width: 80, render: (_: unknown, rec: Record<string, unknown>) => <Button size="small" icon={<EyeOutlined />} onClick={() => router.push(`/results/${rec.id}`)}>Xem</Button> },
   ];
 

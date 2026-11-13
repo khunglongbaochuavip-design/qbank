@@ -95,7 +95,7 @@ export default function SessionsPage() {
               <Button size="small" danger icon={<StopOutlined />}>Kết thúc</Button>
             </Popconfirm>
           )}
-          {rec.status === 'ended' && <Button size="small" icon={<DownloadOutlined />} onClick={() => onExport(rec)}>Xuất Excel</Button>}
+          {(rec.status === 'ended' || rec.status === 'active') && <Button size="small" icon={<DownloadOutlined />} onClick={() => onExport(rec)}>Xuất Excel</Button>}
           <Popconfirm
             title="Xóa phiên thi này hoàn toàn?"
             description={((rec._count as { attempts?: number })?.attempts || 0) > 0

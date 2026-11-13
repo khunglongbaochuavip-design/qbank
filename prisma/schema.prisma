@@ -454,6 +454,8 @@ model ExamAttempt {
   score       Float?
   numCorrect  Int?
   numWrong    Int?
+  awayCount        Int       @default(0) // Số lần rời khỏi màn hình thi (chuyển tab / chuyển app)
+  awayTotalSeconds Int       @default(0) // Tổng thời gian rời khỏi màn hình thi (giây)
   status      AttemptStatus @default(in_progress)
   seed        String?
 

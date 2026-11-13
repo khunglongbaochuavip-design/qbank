@@ -35,6 +35,14 @@ export default function AttemptResultPage() {
           <Tag color={(attempt.score as number) >= 5 ? 'green' : 'red'} style={{ fontSize: 24, fontWeight: 700, padding: '6px 20px' }}>{attempt.score as number}</Tag></div>
         <div><div style={{ color: '#64748b', fontSize: 13 }}>Đúng / Sai</div>
           <div style={{ fontWeight: 700 }}><span style={{ color: '#22c55e' }}>{attempt.numCorrect as number} đúng</span> · <span style={{ color: '#ef4444' }}>{attempt.numWrong as number} sai</span></div></div>
+        <div>
+          <div style={{ color: '#64748b', fontSize: 13 }}>Thoát màn hình</div>
+          <div style={{ fontWeight: 700 }}>
+            <Tag color={((attempt.awayCount as number) || 0) > 0 ? (((attempt.awayTotalSeconds as number) || 0) >= 30 || ((attempt.awayCount as number) || 0) >= 3 ? 'red' : 'orange') : 'green'} style={{ fontWeight: 700, marginTop: 2 }}>
+              {((attempt.awayCount as number) || 0)} lần ({((attempt.awayTotalSeconds as number) || 0)}s)
+            </Tag>
+          </div>
+        </div>
       </div>
 
       {questions.map((q, i) => (
