@@ -25,35 +25,42 @@ export async function saveAnswerRecord(
     return { ok: false, error: 'Phương án không hợp lệ.' };
   }
 
-  const aq = await prisma.examAttemptQuestion.findUnique({
-    where: { attemptId_questionId: { attemptId, questionId } },
-  });
+  const [aq, existing] = await Promise.all([
+    prisma.examAttemptQuestion.findUnique({
+      where: { attemptId_questionId: { attemptId, questionId } },
+    }),
+    prisma.examAnswer.findUnique({
+      where: { attemptId_questionId: { attemptId, questionId } },
+      select: { id: true, clientTs: true, selectedOption: true },
+    }),
+  ]);
   if (!aq) return { ok: false, error: 'Câu hỏi không hợp lệ.' };
+
+  const ts = typeof clientTs === 'number' && Number.isFinite(clientTs) ? clientTs : Date.now();
+
+  // Fast path: if an equally new or newer answer is already stored, skip writing
+  if (existing && existing.clientTs !== null && existing.clientTs >= ts) {
+    return { ok: true, applied: false };
+  }
 
   const optionMap = JSON.parse(aq.optionMap) as Record<string, string>; // displayed -> original
   const snapshot = JSON.parse(aq.snapshotContent) as { correctOption: string };
 
   const originalOption = selectedOption ? optionMap[selectedOption] ?? null : null;
   const isCorrect = !!originalOption && originalOption === snapshot.correctOption;
-  const ts = typeof clientTs === 'number' && Number.isFinite(clientTs) ? clientTs : Date.now();
 
   const data = { selectedOption, originalOption, isCorrect, answeredAt: new Date(), clientTs: ts };
 
-  // Conditional update: only if no stored timestamp or stored one is older
-  const updated = await prisma.examAnswer.updateMany({
-    where: {
-      attemptId, questionId,
-      OR: [{ clientTs: null }, { clientTs: { lt: ts } }],
-    },
-    data,
-  });
-  if (updated.count > 0) return { ok: true, applied: true };
-
-  const exists = await prisma.examAnswer.findUnique({
-    where: { attemptId_questionId: { attemptId, questionId } },
-    select: { id: true },
-  });
-  if (exists) return { ok: true, applied: false }; // a newer answer is already stored
+  if (existing) {
+    const updated = await prisma.examAnswer.updateMany({
+      where: {
+        attemptId, questionId,
+        OR: [{ clientTs: null }, { clientTs: { lt: ts } }],
+      },
+      data,
+    });
+    return { ok: true, applied: updated.count > 0 };
+  }
 
   try {
     await prisma.examAnswer.create({

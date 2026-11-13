@@ -17,7 +17,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const attempt = await prisma.examAttempt.findUnique({
       where: { sessionId_studentId: { sessionId, studentId: user.id } },
-      include: { session: { select: { durationMinutes: true } } },
+      include: {
+        session: { select: { durationMinutes: true } },
+        answers: { select: { questionId: true, selectedOption: true, clientTs: true } },
+      },
     });
 
     if (!attempt) return notFound('Bài thi không tồn tại.');
@@ -27,15 +30,30 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     // Final sync: the browser sends ALL its current answers with the submit, so an answer
     // whose individual save was still in flight (or failed) is not lost. Newer-click-wins still applies.
+    // Optimization for high concurrency (50+ simultaneous submits): skip answers already stored with >= clientTs.
     const durationSeconds = (attempt.session.durationMinutes || 60) * 60;
     const elapsedSeconds = Math.floor((Date.now() - new Date(attempt.startedAt).getTime()) / 1000);
     const withinTime = elapsedSeconds <= durationSeconds + SUBMIT_GRACE_SECONDS;
 
     if (withinTime && Array.isArray(body.answers)) {
-      for (const a of body.answers as { questionId?: string; selectedOption?: string | null; clientTs?: number }[]) {
-        if (!a || typeof a.questionId !== 'string') continue;
+      const storedMap = new Map(attempt.answers.map(x => [x.questionId, x]));
+      const unsynced = (body.answers as { questionId?: string; selectedOption?: string | null; clientTs?: number }[])
+        .filter(a => {
+          if (!a || typeof a.questionId !== 'string') return false;
+          const st = storedMap.get(a.questionId);
+          if (!st) return true;
+          if (typeof a.clientTs === 'number' && st.clientTs !== null && st.clientTs >= a.clientTs && st.selectedOption === (a.selectedOption ?? null)) {
+            return false;
+          }
+          if (a.clientTs === 0 && st.selectedOption !== null) {
+            return false;
+          }
+          return true;
+        });
+
+      for (const a of unsynced) {
         await saveAnswerRecord(
-          attempt.id, a.questionId,
+          attempt.id, a.questionId!,
           a.selectedOption ?? null,
           typeof a.clientTs === 'number' ? a.clientTs : null,
         );

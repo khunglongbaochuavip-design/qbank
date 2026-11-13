@@ -15,13 +15,13 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     const attempt = await prisma.examAttempt.findUnique({
       where: { sessionId_studentId: { sessionId, studentId: user.id } },
+      include: { session: { select: { durationMinutes: true } } },
     });
     if (!attempt || attempt.status !== 'in_progress') return badRequest('Bài thi không hợp lệ hoặc đã nộp.');
 
     // Check time
-    const session = await prisma.examSession.findUnique({ where: { id: sessionId } });
-    if (session) {
-      const durationSeconds = (session.durationMinutes || 60) * 60;
+    if (attempt.session) {
+      const durationSeconds = (attempt.session.durationMinutes || 60) * 60;
       const elapsedSeconds = Math.floor((Date.now() - new Date(attempt.startedAt).getTime()) / 1000);
       if (elapsedSeconds > durationSeconds + 10) {
         return badRequest('Đã hết thời gian làm bài.');
